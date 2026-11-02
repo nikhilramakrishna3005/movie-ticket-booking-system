@@ -1,9 +1,8 @@
 # Architecture
 
-> **Status: PROPOSED DESIGN. No application code exists yet.**
-> This document describes the intended design. Section 13 tracks what is actually implemented;
-> at the time of writing, **nothing is implemented**. Any statement below such as "the system
-> does X" describes the target design, not verified behavior.
+> **Status: DESIGN, PARTLY IMPLEMENTED.** This document describes the intended design. Section 13
+> tracks what is actually implemented and how it was verified. Any statement below such as "the
+> system does X" describes the target design unless §13 says otherwise.
 >
 > Revision 2 applies design decisions approved by the engineering owner during review of PR #1
 > (see `docs/ai-workflow.md` §4). Those are decisions about the *design*; no code has been
@@ -580,17 +579,17 @@ and Kafka would be added only when measurements justify them (ADRs 0001–0003).
 
 | Component | Status |
 |---|---|
-| Project scaffolding, Docker Compose | Not implemented |
-| Flyway schema and seed data | Not implemented |
-| Security (HTTP Basic, seeded users, scoping) | Not implemented |
+| Project scaffolding, Docker Compose | Implemented (Phase 1, PR #2). Compose stack not yet started end to end. |
+| Flyway schema and seed data | Implemented (V1–V8). Verified on local PostgreSQL 16 only; Testcontainers not run (no Docker). |
+| Security (HTTP Basic, seeded users, scoping) | Implemented (PR #2). Verified with MockMvc and on local PostgreSQL 16 only. Currently every `/api/**` endpoint, including the seat map, requires login (see §8.1 conflict noted in PR #2). |
 | Catalog & search | Not implemented |
-| Theater & showtimes | Not implemented |
-| Seat holds & locking | Not implemented |
+| Theater & showtimes | Read-only `Showtime`/`Seat` mapping used by holds; no admin or search endpoints |
+| Seat holds & locking | Implemented (Phase 2): create hold, release hold, seat map (§5.3, §5.4, §5.6). Locks use native `SELECT … FOR UPDATE`. Verified on local PostgreSQL 16 only; Testcontainers not run. **Not yet implemented:** the §5.6 `PAYMENT_IN_PROGRESS` release check (needs Phase 3 payment attempts) and `GET /holds/{id}`. |
 | Simulated payment & attempt states | Not implemented |
 | Booking confirmation & outbox write | Not implemented |
 | Admin endpoint (create showtime) | Not implemented |
 | React UI | Not implemented |
-| Integration / concurrency tests | Not implemented |
+| Integration / concurrency tests | Security, schema, hold API, and hold concurrency ITs written; run on local PostgreSQL 16 only (Testcontainers blocked: no Docker) |
 | Playwright E2E tests | Not implemented |
 
 Update this table only after a phase's verification checkpoint has actually passed.
