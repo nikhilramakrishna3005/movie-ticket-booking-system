@@ -34,25 +34,18 @@ const SCENARIOS: Array<{ value: PaymentScenario; title: string; text: string; ic
 
 export function CheckoutPage() {
   const { holdId = '' } = useParams();
-  const { user, requestLogin } = useAuth();
+  const { user } = useAuth();
   const { sessions } = useCheckoutSessions();
   const session = sessions[holdId];
 
+  // Sessions are cleared on sign-out, so a session without a user only happens while re-signing
+  // in after a 401. Checkout stays mounted then, keeping the current attempt's idempotency key.
   if (!session || (user && user.username !== session.ownerUsername)) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20">
         <StateMessage block title="This checkout is no longer open" testId="checkout-missing" action={<ButtonLink to="/">Browse showtimes</ButtonLink>}>
           Checkout details live only in this tab's memory, so they are gone after a reload or sign-out. Any seats you held are
           released automatically when the hold expires.
-        </StateMessage>
-      </div>
-    );
-  }
-  if (!user) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-20">
-        <StateMessage block title="Sign in to finish checkout" action={<Button onClick={() => void requestLogin()}>Sign in</Button>}>
-          Your session ended. Sign in again as {session.ownerUsername} to continue.
         </StateMessage>
       </div>
     );
@@ -125,7 +118,7 @@ function Checkout({ session }: { session: CheckoutSession }) {
             </p>
           </div>
 
-          <fieldset className="surface p-5" disabled={!!checkout.attempt || terminal || pending || checkout.submitting}>
+          <fieldset className="surface p-5 transition-opacity disabled:opacity-60" disabled={!!checkout.attempt || terminal || pending || checkout.submitting}>
             <legend className="sr-only">Simulated payment outcome</legend>
             <div className="mb-4 flex items-center justify-between gap-3">
               <p className="flex items-center gap-2 font-semibold text-mist-50">

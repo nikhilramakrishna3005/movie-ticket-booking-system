@@ -67,8 +67,11 @@ export function remainingMs(expiresAt: string, nowMs: number, skewMs: number): n
   return Math.max(0, Date.parse(expiresAt) - (nowMs + skewMs));
 }
 
-/** 125_000 → "2:05" */
+/**
+ * 125_900 → "2:05". Rounds down so sub-second skew never shows a fresh 8-minute hold as "8:01",
+ * but shows "0:01" until the hold has actually run out.
+ */
 export function countdown(ms: number): string {
-  const totalSeconds = Math.ceil(ms / 1000);
+  const totalSeconds = ms <= 0 ? 0 : Math.max(1, Math.floor(ms / 1000));
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
 }

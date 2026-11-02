@@ -65,8 +65,10 @@ export function useCheckout(session: CheckoutSession | undefined): CheckoutContr
         if (!cancelled) apply(fromPayment(payment));
       } catch (error) {
         if (cancelled) return;
-        if (error instanceof ApiError && error.status === 401) {
-          if (!(await requestLogin())) return;
+        if (error instanceof ApiError && error.status === 401 && !(await requestLogin())) {
+          // Sign-in dismissed: stop polling and let the customer check again manually.
+          if (!cancelled) setPollIndex(POLL_DELAYS_MS.length);
+          return;
         }
       }
       if (!cancelled) setPollIndex((index) => index + 1);

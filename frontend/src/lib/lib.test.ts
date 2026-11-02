@@ -38,8 +38,10 @@ describe('dates', () => {
     // The client clock runs 30 s fast: skew (server - client) is -30 s.
     assert.equal(remainingMs(expiresAt, serverNow + 30_000, -30_000), 8 * 60_000);
     assert.equal(remainingMs(expiresAt, serverNow + 9 * 60_000, 0), 0);
-    assert.equal(countdown(125_000), '2:05');
+    assert.equal(countdown(125_900), '2:05');
+    assert.equal(countdown(480_300), '8:00');
     assert.equal(countdown(400), '0:01');
+    assert.equal(countdown(0), '0:00');
   });
 });
 
