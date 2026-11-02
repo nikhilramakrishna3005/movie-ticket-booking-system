@@ -1,5 +1,8 @@
 # Build stage: tests are not run here; they run via ./mvnw verify (integration tests need Docker).
 FROM eclipse-temurin:21-jdk AS build
+# Without unzip the Maven wrapper downloads the .tar.gz distribution, which fails the .zip
+# checksum pinned in maven-wrapper.properties.
+RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./

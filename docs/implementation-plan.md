@@ -106,8 +106,11 @@ Each phase is one or a few small PRs on feature branches, reviewed and merged by
 
 ### Phase 5: Minimal React customer flow (1.25 h)
 - **Scope:** Login (credentials in memory only), search, seat map, checkout with countdown and
-  scenario selector (new idempotency key per "Pay" click), unknown-status polling message,
-  confirmation page. `data-testid` attributes for E2E. Add `frontend` to Docker Compose.
+  scenario selector, unknown-status polling message, confirmation page. `data-testid`
+  attributes for E2E. Add `frontend` to Docker Compose. (Delivered as Task 07. Refinement of
+  the original "new key per Pay click": a key belongs to one payment *attempt*; retrying after an
+  ambiguous result resends the same key, and only a definitive decline starts a new attempt
+  with a new key.)
 - **Checkpoint:** After a clean start, a human completes one booking in the browser and records
   the result. A check of browser storage (DevTools) shows no credentials in
   `localStorage`/`sessionStorage`/cookies.

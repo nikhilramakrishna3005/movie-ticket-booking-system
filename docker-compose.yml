@@ -1,5 +1,7 @@
 # Local-only stack. Copy .env.example to .env and set values before running:
 #   docker compose up --build
+# Then open http://localhost:3000 (or FRONTEND_HOST_PORT). The API is served from the same
+# origin under /api; the backend container is not published to the host.
 # Clean start (drops the database volume):
 #   docker compose down -v && docker compose up --build
 name: movie-booking
@@ -28,10 +30,26 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       DB_USERNAME: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "127.0.0.1:${BACKEND_HOST_PORT:-8080}:8080"
+    # No published port: the backend trusts X-Forwarded-* headers (server.forward-headers-strategy),
+    # so it must only be reachable through the frontend proxy.
+    expose:
+      - "8080"
     depends_on:
       postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 20s
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-3000}:8080"
+    depends_on:
+      backend:
         condition: service_healthy
 
 volumes:

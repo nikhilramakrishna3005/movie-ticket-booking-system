@@ -625,7 +625,7 @@ and Kafka would be added only when measurements justify them (ADRs 0001–0003).
 
 | Component | Status |
 |---|---|
-| Project scaffolding, Docker Compose | Implemented (Phase 1, PR #2). Compose stack not yet started end to end. |
+| Project scaffolding, Docker Compose | Implemented (Phase 1, PR #2). Task 07 added the `frontend` service (nginx serving the React build and proxying `/api` and `/actuator` same-origin), a backend healthcheck, and stopped publishing the backend port. Verified in Task 07: `docker compose up --build` started all three services healthy in the agent VM, health and API reachable through the proxy. |
 | Flyway schema and seed data | Implemented (V1–V9; V9 adds `city.time_zone` in Task 06). Since Task 06, verified with Testcontainers (PostgreSQL 16.15, `./mvnw clean verify`). |
 | Security (HTTP Basic, seeded users, scoping) | Implemented (PR #2). Since Task 06, the browsing `GET` endpoints and the seat map are anonymous as §8.1 requires; holds, payments, bookings and admin endpoints are unchanged. |
 | Catalog & search | Implemented (Task 06): `GET /cities`, `/movies`, `/showtimes`, `/showtimes/{id}` (§10, §11). Verified by `DiscoveryApiIT` on Testcontainers. |
@@ -634,7 +634,7 @@ and Kafka would be added only when measurements justify them (ADRs 0001–0003).
 | Simulated payment & attempt states | Implemented (Phase 3): provider with ledger and transaction guard, attempt states, idempotency, on-demand resolution (§6). Verified on local PostgreSQL 16 only; Testcontainers not run. No background reconciliation (by design). |
 | Booking confirmation & outbox write | Implemented (Phase 3): TX3 (§6.8), `GET /bookings/{id}`. The outbox is written, not relayed. **Not yet implemented:** `GET /bookings` (list). |
 | Admin endpoint (create showtime) | Implemented (Task 06): `POST /admin/showtimes`, theater-scoped (§8.1). No admin UI. |
-| React UI | Not implemented |
+| React UI | Implemented (Task 07): customer flow only (discover, movie, seats, checkout, ticket); no admin UI. Frontend unit tests (Node test runner) cover the API client, payment-outcome classification and helpers. Booking flows (success after decline, timeout/`UNKNOWN` polling, seat conflict, admin refused, hold expiry) were exercised in headless Chrome against the Compose stack by a throwaway script; no automated UI tests are committed yet. |
 | Integration / concurrency tests | Security, schema, hold, payment, discovery and admin ITs. Earlier phases ran them on local PostgreSQL 16 only. In Task 06 Docker was installed in the agent VM and the **whole suite ran on Testcontainers for the first time**: 132/132 ITs and 59/59 unit tests passed. |
 | Playwright E2E tests | Not implemented |
 
