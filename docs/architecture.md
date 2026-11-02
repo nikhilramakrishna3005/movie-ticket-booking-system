@@ -284,7 +284,7 @@ the second insert. That request returns 409 `ACTIVE_HOLD_EXISTS`.
 ### 6.1 Simulated provider
 
 - `SimulatedPaymentProvider` is one concrete class in `payment` (no interface; there is one
-  implementation). Operations: `charge(key, amount, scenario)`, `status(key)`, `void(key)`.
+  implementation). Operations: `charge(key, amount, scenario)`, `status(key)`, `voidCharge(key)`.
 - It represents an external system. It keeps its own ledger in `simulated_provider_charge`
   (`UNIQUE (idempotency_key)`), written in its **own** short transaction. A second `charge`
   with an existing key returns the recorded result without creating a new charge.
@@ -297,7 +297,7 @@ the second insert. That request returns 409 `ACTIVE_HOLD_EXISTS`.
 | `TIMEOUT` | `CAPTURED` (recorded before the delay) | none within the client timeout: the caller sees a timeout |
 
 `TIMEOUT` deliberately models the hard case: money was taken but the caller does not know it.
-- **Guard:** `charge` and `void` throw `IllegalStateException` if called while a transaction is
+- **Guard:** `charge`, `status` and `voidCharge` throw `IllegalStateException` if called while a transaction is
   active (`TransactionSynchronizationManager.isActualTransactionActive()`). This enforces the
   "never inside a DB transaction" rule and is asserted by a test.
 - Delays and timeouts are configured durations. Tests drive them with the injected `Clock` and
@@ -359,7 +359,7 @@ sequenceDiagram
     B->>DB: TX1: lock hold(s), lock show_seat rows by seat_id, verify, mark HELD
     B-->>C: 201 {holdId, expiresAt}
 
-    C->>B: POST /api/holds/{holdId}/payments (Idempotency-Key: K1, scenario)
+    C->>B: POST /api/holds/{holdId}/payment (Idempotency-Key: K1, scenario)
     B->>DB: TX2: lock hold, check owner + validity + time margin, insert attempt K1 PENDING
     Note over B,DB: if K1 already exists, return that attempt's current state, no charge
     B->>P: charge(K1) — no DB transaction open
@@ -374,7 +374,7 @@ sequenceDiagram
             B->>DB: mark hold EXPIRED if expired, release its seats (commit)
             B->>P: void(K1) — no DB transaction open
             B->>DB: TX4: attempt VOIDED
-            B-->>C: 409 HOLD_EXPIRED {paymentStatus: VOIDED}
+            B-->>C: 409 PAYMENT_VOIDED {paymentId, status: VOIDED}
         end
     else DECLINED
         B->>DB: attempt DECLINED (hold stays ACTIVE)
@@ -402,7 +402,8 @@ In TX2 (`now = clock.instant()`), with the hold row locked:
      409 `PAYMENT_IN_PROGRESS`.
 2. The hold must belong to the caller (else 404), be `ACTIVE`, and have
    `expires_at - now >= minimumRemaining` (proposed 60 s, which must exceed the payment client
-   timeout plus a clock-skew allowance). Otherwise 409 `HOLD_EXPIRED` / `HOLD_TOO_CLOSE_TO_EXPIRY`.
+   timeout plus a clock-skew allowance). Otherwise 409 `HOLD_EXPIRED` / `HOLD_NOT_ACTIVE` /
+   `HOLD_TOO_CLOSE_TO_EXPIRY`.
 3. No `PENDING` or `UNKNOWN` attempt may exist for the hold. Otherwise 409 `PAYMENT_IN_PROGRESS`,
    with the partial unique index as a backstop.
 4. The hold must have fewer than 3 attempts (proposed limit). Otherwise 409 `TOO_MANY_ATTEMPTS`.
@@ -533,8 +534,9 @@ All paths are under `/api`. Errors use a JSON body `{ "code": "…", "message": 
 | `POST /showtimes/{id}/holds` | customer | 201 hold; 400 `INVALID_REQUEST` / `INVALID_SEATS`; 409 `SEATS_UNAVAILABLE` / `SEATS_BUSY` / `ACTIVE_HOLD_EXISTS` / `SHOWTIME_CLOSED` |
 | `GET /holds/{id}` | owner | Hold detail and expiry |
 | `DELETE /holds/{id}` | owner | 204; 409 `PAYMENT_IN_PROGRESS` |
-| `POST /holds/{id}/payments` (header `Idempotency-Key`) | owner | 201 booking; 402 `PAYMENT_DECLINED`; 202 `UNKNOWN`; 409 `HOLD_EXPIRED` (with `VOIDED` if captured) / `PAYMENT_IN_PROGRESS` / `TOO_MANY_ATTEMPTS`; 422 `IDEMPOTENCY_KEY_REUSED` |
-| `GET /payments/{id}` | owner | Current state; triggers on-demand resolution if `UNKNOWN` or stale `PENDING` |
+| `POST /holds/{id}/payment` (header `Idempotency-Key`, body `{scenario}`) | owner | 201 payment with booking; 202 `UNKNOWN`; 400 `INVALID_REQUEST`; 402 `PAYMENT_DECLINED`; 409 `PAYMENT_VOIDED` (captured, then voided because the hold could no longer be booked) / `PAYMENT_IN_PROGRESS` (also for a replayed key whose attempt is still `PENDING`) / `HOLD_EXPIRED` / `HOLD_NOT_ACTIVE` / `HOLD_TOO_CLOSE_TO_EXPIRY` / `TOO_MANY_ATTEMPTS` / `SEATS_BUSY`; 422 `IDEMPOTENCY_KEY_REUSED` |
+| `GET /payments/{id}` | owner | 200 current state (with the booking once `SUCCEEDED`); triggers on-demand resolution if `UNKNOWN` or stale `PENDING` |
+| `GET /bookings/{id}` | owner | Confirmation: reference, movie, theater, screen, city, start time, seats, total |
 | `GET /bookings` | customer | Own confirmed bookings |
 | `GET /auth/me` | authenticated | Current user id, username, display name and role (used by the React login flow) |
 | `POST /admin/theaters/{theaterId}/showtimes` | theater admin (scoped) | 201; 403 not assigned; 409 overlapping showtime |
@@ -583,13 +585,13 @@ and Kafka would be added only when measurements justify them (ADRs 0001–0003).
 | Flyway schema and seed data | Implemented (V1–V8). Verified on local PostgreSQL 16 only; Testcontainers not run (no Docker). |
 | Security (HTTP Basic, seeded users, scoping) | Implemented (PR #2). Verified with MockMvc and on local PostgreSQL 16 only. Currently every `/api/**` endpoint, including the seat map, requires login (see §8.1 conflict noted in PR #2). |
 | Catalog & search | Not implemented |
-| Theater & showtimes | Read-only `Showtime`/`Seat` mapping used by holds; no admin or search endpoints |
-| Seat holds & locking | Implemented (Phase 2): create hold, release hold, seat map (§5.3, §5.4, §5.6). Locks use native `SELECT … FOR UPDATE`. Verified on local PostgreSQL 16 only; Testcontainers not run. **Not yet implemented:** the §5.6 `PAYMENT_IN_PROGRESS` release check (needs Phase 3 payment attempts) and `GET /holds/{id}`. |
-| Simulated payment & attempt states | Not implemented |
-| Booking confirmation & outbox write | Not implemented |
+| Theater & showtimes | Read-only `Showtime`/`Seat` mapping and venue names used by holds and booking confirmations; no admin or search endpoints |
+| Seat holds & locking | Implemented (Phase 2): create hold, release hold, seat map (§5.3, §5.4, §5.6). Locks use native `SELECT … FOR UPDATE`. Verified on local PostgreSQL 16 only; Testcontainers not run. The §5.6 `PAYMENT_IN_PROGRESS` release check was added in Phase 3. **Not yet implemented:** `GET /holds/{id}`. |
+| Simulated payment & attempt states | Implemented (Phase 3): provider with ledger and transaction guard, attempt states, idempotency, on-demand resolution (§6). Verified on local PostgreSQL 16 only; Testcontainers not run. No background reconciliation (by design). |
+| Booking confirmation & outbox write | Implemented (Phase 3): TX3 (§6.8), `GET /bookings/{id}`. The outbox is written, not relayed. **Not yet implemented:** `GET /bookings` (list). |
 | Admin endpoint (create showtime) | Not implemented |
 | React UI | Not implemented |
-| Integration / concurrency tests | Security, schema, hold API, and hold concurrency ITs written; run on local PostgreSQL 16 only (Testcontainers blocked: no Docker) |
+| Integration / concurrency tests | Security, schema, hold, payment API, and hold/payment concurrency ITs written; run on local PostgreSQL 16 only (Testcontainers blocked: no Docker) |
 | Playwright E2E tests | Not implemented |
 
 Update this table only after a phase's verification checkpoint has actually passed.
