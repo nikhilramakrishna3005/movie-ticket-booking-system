@@ -137,6 +137,10 @@ Each phase is one or a few small PRs on feature branches, reviewed and merged by
     with real findings only.
 - **Checkpoint:** A human follows only the README from a clean clone, starts the stack, and runs
   the test suites; the results are recorded.
+- **Delivered in the final audit (2026-11-02).** The ERD and API reference became separate files
+  (`docs/data-model.md`, `docs/api.md`), and a requirements checklist was added
+  (`docs/requirements-checklist.md`). The AI agent followed the README in a fresh clone in the
+  agent VM, with results in the checklist §10. **A human run of the checkpoint is not recorded.**
 
 ## 3. Cut list
 
@@ -161,7 +165,8 @@ test strategy.
 
 ## 4. Proposed test mapping
 
-Proposed only. No tests exist yet.
+Written before any tests existed and kept as planned. The implemented tests and their mapping to
+the criteria are in `docs/test-strategy.md` and `docs/requirements-checklist.md` §7.
 
 | Area | Level | Criteria | Phase |
 |---|---|---|---|
@@ -192,6 +197,10 @@ Proposed only. No tests exist yet.
 ## 6. Time tracking
 
 Fill in actual time only as work happens. Do not pre-fill or estimate after the fact.
+
+**Final audit note (2026-11-02):** time was not tracked precisely during the work, so the
+"Actual" column is left empty rather than reconstructed. Git commit timestamps exist, but they
+record when commits were made, not engineering effort.
 
 | Phase | Budget | Actual | Notes |
 |---|---|---|---|

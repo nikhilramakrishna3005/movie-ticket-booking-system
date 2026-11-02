@@ -1,8 +1,10 @@
 # ADR 0001: Defer Redis (caching, seat holds, rate limiting)
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-02)
 - **Date:** 2026-11-02 (revised 2026-11-02 after review of PR #1)
-- **Deciders:** _Pending human review_
+- **Status history:** Proposed 2026-11-02 (PR #1, merged with the planning documents); Accepted 2026-11-02 by the human engineering owner during review of PR #9, which kept the component deferred for the reasons below.
+- **Deciders:** human engineering owner (accepted 2026-11-02)
+- **Implementation note (final audit, 2026-11-02):** as decided, Redis is not used. It is absent from `backend/pom.xml`, `frontend/package.json` and `docker-compose.yml`. PostgreSQL holds the seat inventory and hold state; holds expire lazily using the injected `Clock`. There is no cache of any kind.
 
 ## Context / Problem
 

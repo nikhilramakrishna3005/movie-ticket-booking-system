@@ -1,9 +1,10 @@
 # AI-Assisted Workflow
 
-> **Status: PLANNED WORKFLOW.** This document describes how AI assistance is intended to be
-> used. The findings sections are intentionally empty placeholders; they must be filled with
-> real observations as work happens. Nothing below should be read as a record of reviews or
-> results that have taken place, unless it is explicitly dated and attributed.
+> **Status: RECORD OF THE WORKFLOW AS USED.** Sections 1–3 describe the intended workflow, written
+> in Phase 0. Sections 4–7 record what actually happened: human review findings, AI mistakes and
+> how they were caught, the task prompts given to the AI agent, and the verification performed.
+> Entries are dated and say who found each issue. Nothing here is a claim of a review or result
+> that did not take place.
 
 ## 1. Principles
 
@@ -73,12 +74,21 @@ Record only findings from human reviews that actually took place. Do not pre-pop
 |---|---|---|---|
 | 2026-11-02 | Phase 3 / PR #4 | Reconciliation race: `CheckoutService.resolveIfDue()` treated provider `NOT_FOUND` as a definitive decline once a `PENDING` attempt was older than 5 s, although the original charge could still be executing. A late capture could then leave the attempt `DECLINED` while the ledger said `CAPTURED`. It was only voided if the request thread survived and the void succeeded. | Resolution now fences an unknown key in the provider ledger (`statusOrFence`), so `NOT_FOUND` means "never charged and never will be". Added a latch-ordered API test and provider-level tests that order the charge and the fence on the ledger key. Verified on local PostgreSQL 16 only; Testcontainers not run. Remaining limitation: architecture §6.7. |
 
+### 4.3 Tasks 06–09: discovery APIs, React app, Playwright, final audit
+
+| Date | Task / PR | Human decision or review finding | Action taken |
+|---|---|---|---|
+| 2026-11-02 | Task 07 / PR #7 (prompt) | The owner required: credentials in memory only; one idempotency key per payment attempt, reused for retries; **no automatic retry with a fresh key after an ambiguous result**; a same-origin reverse proxy instead of permissive CORS; no Playwright yet. | Implemented as specified (`frontend/src/api/client.ts`, `features/checkout/`, `frontend/nginx/`). Covered by `client.test.ts` and `paymentFlow.test.ts`. |
+| 2026-11-02 | Task 07 / PR #7 | The interactive browser test session the AI agent started was stopped from the owner's side. | The AI agent switched to a throwaway headless-Chrome script in `/tmp` (not committed) for manual flow checks, and said so in its report. |
+| 2026-11-02 | Task 08 / PR #8 | **Human review found** that the E2E fixture `findScreenId()` sent `city=1` to `GET /api/showtimes`, whose parameter is `cityId`. The API ignores unknown parameters, so the filter was silently not applied. | Fixed in `5a3c6d1`: the fixture uses `cityId` and asserts every returned showtime is in Dallas, so an unapplied filter fails the test. Against the running stack, `city=1` returned cities 1, 2 and 3; `cityId=1` returned only city 1. Playwright 3/3 on two runs. |
+| 2026-11-02 | Task 09 (final audit, prompt) | The owner asked for a submission audit: honest requirements checklist, documentation from the actual code, Git and secret checks, a clean-start verification, no invented hours, and no new features. | This PR. Results are in `docs/requirements-checklist.md` and `docs/test-strategy.md`. |
+| 2026-11-02 | Task 09 / PR #9 (review) | The owner accepted ADRs 0001–0003 (Redis, Kafka and Solr stay deferred), and asked for one root-level command that runs every test suite and fails on any failure or skipped test. | ADR statuses set to Accepted, with the status history kept; `run-tests.sh` added and verified (`docs/test-strategy.md`). |
+
 ## 5. AI mistakes observed
 
-_Placeholder — to be filled in with actual mistakes made by AI assistance (e.g. incorrect
-code, false claims, scope creep) and how they were caught. Do not pre-populate. Whether any
+Only mistakes that actually occurred, recorded by the AI agent when they were found. Whether any
 item in §4.1 counts as an AI mistake (rather than a design choice the owner changed) is for
-the human owner to classify; none have been entered here._
+the human owner to classify; none of those are entered here.
 
 | Date | Phase / PR | Mistake | How it was caught | Correction |
 |---|---|---|---|---|
@@ -88,7 +98,54 @@ the human owner to classify; none have been entered here._
 | 2026-11-02 | Phase 3 (payment) | The first draft of the confirmation transaction returned "nothing to do" when the attempt was already settled. If a stale-`PENDING` resolution had recorded `DECLINED` (`NOT_RECEIVED`) while the charge was still in flight, the late capture would have been kept without a booking. | The AI agent's own review of the settled-attempt branch before writing tests. | A capture for an attempt that is settled but not `SUCCEEDED` is now voided. **This was incomplete:** it depended on the request thread surviving and the void succeeding. Human review of PR #4 found the underlying race (§4.2); it is now prevented by fencing the key. |
 | 2026-11-02 | Phase 3 (payment) | The first concurrent-poll test only counted bookings. With the hold lock removed from the confirmation transaction, a losing poll saw no `HELD` seats, treated the converted hold as invalid, and **voided the charge of a confirmed booking**. The test still passed. | Mutation check by the AI agent: replaced the hold lock with a plain read and re-ran `PaymentConcurrencyIT` on local PostgreSQL. | Added assertions that no void is issued and the ledger stays `CAPTURED`; the mutation now fails the test in 3 of 3 runs. Not yet reviewed by a human. |
 | 2026-11-02 | Task 06 (admin showtimes) | The AI agent relied on the `showtime_no_overlap_ex` exclusion constraint alone for concurrent showtime creation, assuming the losers would get an exclusion violation. Concurrent overlapping inserts instead **deadlocked** on each other's GiST index entries. The aborted request was reported as `409 SEATS_BUSY`, an unrelated error code. No overlapping showtime was stored. | The latch-started `AdminShowtimeApiIT.concurrentOverlappingCreatesProduceExactlyOneShowtime` failed with "deadlock detected" on the first Testcontainers run. | The creating transaction now locks the `screen` row first, with a bounded `lock_timeout` (409 `SCREEN_BUSY` when exceeded). Losers then get `SHOWTIME_OVERLAP`. The test passed in 5 of 5 repeated runs. Not yet reviewed by a human. |
+| 2026-11-02 | Task 07 (Docker) | The backend image build failed before any Maven step: without `unzip` in `eclipse-temurin:21-jdk`, the Maven wrapper downloaded the `.tar.gz` distribution, which failed the `.zip` checksum pinned in `maven-wrapper.properties`. | The first `docker compose up --build` run by the AI agent. | `9e4d960` installs `unzip` in the build stage, keeping checksum validation. |
+| 2026-11-02 | Task 07 (React) | `ScrollToTop` returned `window.scrollTo()` from an expression-bodied effect. Current Chrome returns a Promise from `scrollTo`, which React then called as the effect cleanup, crashing the app on every route change. Card posters were also blank because of a positioning class conflict. | The AI agent's headless-Chrome flow script against the Compose stack (the crash appeared in the captured console stack trace). | `1598feb`: block-bodied effects, a `fill` prop on `Poster`, and other layout fixes found in the same runs. |
+| 2026-11-02 | Task 07 (checkout) | A fresh 8-minute hold displayed as "8:01" because the countdown rounded up and sub-second clock skew pushed it over. Separately, a 401 during checkout unmounted the checkout page, so after re-login a retry would have minted a **new** idempotency key for an attempt whose outcome might be unknown. | "8:01": the headless flow script's captured countdown text. The 401 issue: the AI agent's own review of the re-login path. | `c25f062`: the countdown rounds down, and checkout stays mounted during re-login so the open attempt keeps its key. |
+| 2026-11-02 | Task 08 (Playwright) | The first fixture looked up Starlight's screen with a dateless search, which defaults to today; today had no seeded showtimes, so both tests failed. | The first Playwright run. | The fixture scans the next 14 days. The query parameter in that fix was wrong (`city`), which the human found in review (§4.3). |
+| 2026-11-02 | Task 08 (Playwright) | The decline test clicked a showtime within the discover page's 300 ms search debounce, and the late search update replaced the navigation. This is an **app race**, not only a test problem. | The second Playwright run (1 of 2 failed). | The test waits for the search to apply before clicking. The app race is **not fixed** (out of scope) and is listed in the README known limitations. |
+| 2026-11-02 | Task 09 (audit) | The README's example search `cityId=1&date=2026-11-03&q=Intersteller` returned no results (Interstellar was not showing in Dallas that day). The architecture status table still said holds and payments were "Testcontainers not run", although they had passed on Testcontainers since Task 06. The design API table lacked `HOLD_CONVERTED`. | The AI agent ran every documented example against the clean stack during the audit. | README example changed to `cityId=2`; status rows corrected; `docs/api.md` lists the codes found in the code. |
 
-## 6. Reflections
+## 6. Task prompts and context (Tasks 06–09)
 
-_Placeholder — to be written at the end of the assessment, based on the entries above._
+The prompts below were given by the human owner to one Cursor cloud agent (Claude) working in a
+VM with a clone of this repository. Earlier phases (PRs #1–#4) were done by a different agent
+session whose prompts are not available here; their findings are recorded in §4.1, §4.2 and §5.
+The prompts are summarized, and constraints are quoted where they shaped the result.
+
+| Task | Prompt summary | Key constraints given |
+|---|---|---|
+| 06: discovery and showtime APIs (PR #6) | Inspect `main` and the docs, confirm PR #4 is present, check for existing Task 06 work, then implement public cities, movies, showtime search (`pg_trgm`, pagination, local dates) and detail, an anonymous seat map, and theater-scoped admin showtime creation with overlap protection. | "Preserve existing architecture and Flyway migration history." "Do not implement React in this task." "Report Docker/Testcontainers checks accurately if unavailable." "Never merge, squash, amend, force-push or rewrite history." |
+| 07: Cinéva React app (PR #7) | Build a polished React + TypeScript + Vite customer app (discover, movie, seats, login, checkout, ticket) on the real endpoints. Add a frontend Docker service with a same-origin proxy. | "No fake booking confirmations or hardcoded seat availability." "Do not automatically retry a charge with a fresh key after an ambiguous result." "Store credentials in memory only." "Do not implement Playwright yet." "State honestly what was and wasn't verified." |
+| 08: Playwright E2E (PR #8) | A reliable Playwright suite against the Compose app: a successful booking, and a decline followed by a retry with a new key, run twice against a clean database. | "Use data-testid selectors." "No arbitrary sleeps." "Tests must be independent and use fresh/resettable booking data." "Never use already-booked seats." "Do not disable tests or hide failures." |
+| 08 follow-up (PR #8) | Fix the `city` → `cityId` parameter found in human review, add an assertion that the filter applies, check the other parameters, and run the suite twice. | "Make one small descriptive fix commit." "Do not start additional feature work." |
+| 09: final audit (this PR) | Requirements checklist, accurate docs from the actual code, Git and secret audit, clean-start verification of every suite, README walkthrough from a clean checkout. | "Do not invent functionality or results." "Do not claim production scalability without benchmarks." "Do not invent elapsed engineering hours." "Do not modify existing committed Flyway migrations." |
+
+Context the agent worked from: `AGENTS.md`, the docs in `docs/`, the code, and the running stack.
+Its environment needed two VM-only fixes, neither of them committed:
+- installing `docker-compose-v2`;
+- `sudo iptables-legacy -P FORWARD ACCEPT`, because a stale legacy `FORWARD DROP` policy blocked
+  container-to-container traffic. Re-confirmed in the audit.
+
+## 7. Verification performed (Tasks 06–09)
+
+| Task | Commands run by the AI agent | Result |
+|---|---|---|
+| 06 | `./mvnw -B clean verify` (the first full run on Testcontainers) | 59/59 unit tests, 132/132 integration tests |
+| 07 | `npm test`; `npm run build`; `docker compose up --build`; headless-Chrome flows (success after decline, timeout polling, seat conflict, admin refused, hold expiry); `./mvnw -B clean verify` | All passed, after the fixes in §5 |
+| 08 | `npm test`; `npm run build`; `npx playwright test --repeat-each=5`; `docker compose down -v` + `up --build`; `npm run test:e2e` twice; `./mvnw -B clean verify` | 34/34; build OK; 15/15; healthy; 3/3 twice; 59/59 + 132/132 |
+| 08 follow-up | `npx tsc -b`; `npm run test:e2e` twice | OK; 3/3 twice |
+| 09 | The clean start, every suite, and the README steps in a fresh clone (details in `docs/test-strategy.md` and `docs/requirements-checklist.md` §10) | All passed |
+
+A human re-run of these commands is not recorded in this document.
+
+## 8. Reflections
+
+_Placeholder for the human owner's own reflections._ Factual observations from the entries above:
+
+- Several real defects were caught only by **running** things rather than by reading code: the
+  GiST deadlock, the Hibernate lock clause, the Maven checksum failure, the route-change crash and
+  the README example.
+- **Mutation checks** (deliberately breaking the code to see if a test fails) exposed two tests
+  that passed for the wrong reason (§5).
+- **Human review** caught a defect that every automated run missed: the ignored `city` parameter
+  passed because the screen name happened to be unique.

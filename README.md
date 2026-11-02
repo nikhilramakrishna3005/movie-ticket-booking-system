@@ -1,30 +1,75 @@
-# movie-ticket-booking-system
-Concurrent movie ticket booking platform built with Spring Boot, PostgreSQL, and React.
+# Movie Ticket Booking System
 
-## Run locally
+A movie ticket booking system (in the style of BookMyShow or Fandango), built as the Copart SDET
+Internship take-home assessment. Customers find showtimes across theaters and cities, pick exact
+seats, hold them for 8 minutes, pay through a simulated provider, and get a confirmed ticket.
+Theater admins schedule showtimes for their own theaters through the API.
 
-Prerequisites: Docker with the Compose plugin. Nothing else is needed to run the stack.
+The focus is **correctness under concurrency** (a seat is never sold twice, and an expired hold is
+never booked) and **automated proof** of it. The stack is Spring Boot 3.5 (Java 21), PostgreSQL 16,
+React 19 and Docker Compose.
+
+| | |
+|---|---|
+| Requirements coverage | [`docs/requirements-checklist.md`](docs/requirements-checklist.md) |
+| Product scope and deferred features | [`docs/product-scope.md`](docs/product-scope.md) |
+| Architecture, booking and payment flow | [`docs/architecture.md`](docs/architecture.md) |
+| Data model (ERD from Flyway V1–V9) | [`docs/data-model.md`](docs/data-model.md) |
+| REST API reference | [`docs/api.md`](docs/api.md) |
+| Test strategy and final results | [`docs/test-strategy.md`](docs/test-strategy.md) |
+| Decisions: Redis, Kafka, Solr deferred (accepted) | [`docs/decisions/`](docs/decisions/) |
+| AI-assisted workflow record | [`docs/ai-workflow.md`](docs/ai-workflow.md) |
+| Sample data | [`docs/sample-data.md`](docs/sample-data.md) |
+
+## Screenshots
+
+| Discover | Seats |
+|---|---|
+| ![Discover page with city, date strip and filters](docs/screenshots/1-discover.png) | ![Seat map with two selected seats](docs/screenshots/2-seats.png) |
+| **Checkout** | **Ticket** |
+| ![Checkout with hold countdown and simulated payment outcomes](docs/screenshots/3-checkout.png) | ![Confirmed ticket with booking reference](docs/screenshots/4-ticket.png) |
+
+The screenshots were captured from the local Compose stack with Playwright on 2026-11-02.
+
+## Quick start
+
+**Prerequisites:** Docker with the Compose v2 plugin. Nothing else is needed to run the app.
+Running the E2E tests on the host also needs Node 22.18 or later. Building the images downloads
+base images, Maven and npm dependencies once; after that, no hosted service is used.
 
 ```bash
-cp .env.example .env    # then set POSTGRES_PASSWORD to any local value
-docker compose up --build
+cp .env.example .env && docker compose up --build -d --wait
 ```
 
-Open <http://localhost:3000>. Compose starts `postgres`, then `backend` once the database is
-healthy, then `frontend` once `GET /actuator/health` on the backend reports `UP`. The frontend
-container (nginx) serves the React app and proxies `/api` and `/actuator` to the backend, so the
-browser only talks to one origin and no CORS is configured. The backend port is not published to
-the host. Clean start (drops the database volume):
+Then open <http://localhost:3000>.
+
+- **`.env`:** git-ignored, and holds the local PostgreSQL password. The placeholder value works
+  locally; change it if you like.
+- **`--wait`:** returns once all three services report healthy. Compose starts `postgres`, then
+  `backend` once the database is healthy, then `frontend` (nginx) once the backend's
+  `/actuator/health` is `UP`.
+- **Proxy:** nginx serves the React app and proxies `/api` and `/actuator` to the backend, so the
+  browser talks to one origin and no CORS is configured. The backend port is not published.
+
+To check the stack:
 
 ```bash
-docker compose down -v && docker compose up --build
+curl http://localhost:3000/actuator/health          # {"status":"UP"}
+docker compose ps                                   # all three services "(healthy)"
 ```
 
-## Demo accounts (local only)
+To start again from an empty database, and to stop:
 
-> **Local assessment use only.** These accounts and passwords are fictional and intentionally
-> public. They are seeded by `backend/src/main/resources/db/migration/V8__demo_users.sql` and
-> must never be used in a real deployment.
+```bash
+docker compose down -v && docker compose up --build -d --wait   # clean start
+docker compose down                                             # stop (keeps data)
+```
+
+## Demo accounts (fictional, local only)
+
+> These accounts are **fictional, intentionally public and for local assessment use only**. They are
+> seeded by `backend/src/main/resources/db/migration/V8__demo_users.sql` (BCrypt hashes) and must
+> never be used in a real deployment. They are not real credentials.
 
 | Username | Password | Role | Assigned theater |
 |---|---|---|---|
@@ -33,109 +78,132 @@ docker compose down -v && docker compose up --build
 | `admin.dallas` | `dallas-admin-demo` | Theater admin | Starlight Cinemas Downtown |
 | `admin.houston` | `houston-admin-demo` | Theater admin | Bayou Picture House |
 
-The API uses stateless HTTP Basic authentication; there is no signup, session, or token. Basic
-sends credentials with every request, so a real deployment would require HTTPS. Example, through
-the frontend's proxy:
+- **Authentication:** stateless HTTP Basic; there is no signup, session, cookie or token. Basic
+  sends credentials with every request, so any real deployment would need HTTPS. The local
+  stack is plain HTTP, bound to `127.0.0.1`.
+- **The React app:** keeps credentials in memory only, never in `localStorage`,
+  `sessionStorage`, cookies or IndexedDB. Reloading the page signs you out.
 
 ```bash
 curl -u alice:alice-demo-pass http://localhost:3000/api/auth/me
+curl 'http://localhost:3000/api/showtimes?cityId=2&date=2026-11-03&q=Intersteller'   # typo-tolerant search
 ```
 
-`/actuator/health` and the browsing endpoints are public: `GET /api/cities`, `GET /api/movies`,
-`GET /api/showtimes`, `GET /api/showtimes/{id}` and `GET /api/showtimes/{id}/seats`. Holds,
-payments and bookings require a customer login. `/api/admin/**` requires the theater-admin role,
-and an admin may only schedule showtimes for theaters assigned to them. Everything else under
-`/api/**` requires authentication.
+The sample showtimes run from 2026-11-03 to 2027-01-31, at 13:00 and 16:30 in America/Chicago,
+on every screen ([`docs/sample-data.md`](docs/sample-data.md)). There is no admin UI; theater
+admins use `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
+
+## What is implemented
+
+**Customer web app (React, `frontend/`):**
+- Discover: city, a 7-day date strip, typo-tolerant search, and genre and language filters.
+- A movie's showtimes, and a live seat map that refreshes every 15 s.
+- Sign-in when holding seats.
+- Checkout with a countdown and a simulated outcome (`SUCCESS`, `DECLINE`, `TIMEOUT`), with retry
+  after a decline and polling while an outcome is `UNKNOWN`.
+- A digital ticket.
+
+**Backend (Spring Boot, `backend/`):** a modular monolith with packages `catalog`, `theater`,
+`booking`, `payment`, `admin` and `security`.
+- **Seat holds:** all-or-nothing, with ordered row locks and a 2 s lock timeout. Holds expire
+  lazily by an injected UTC `Clock`, with no background job.
+- **Payments:** idempotency keys, unknown outcomes resolved on demand, and a late capture after
+  hold expiry is voided.
+- **Database backstops:** constraints such as `UNIQUE (showtime_id, seat_id)` on booked seats.
+- **Admin:** theater-scoped showtime creation, with overlaps rejected by an exclusion
+  constraint.
+
+**Not implemented (by design or cut for time):**
+- An admin UI, and showtime cancellation.
+- A "my bookings" list (`GET /api/bookings`) and `GET /api/holds/{id}`.
+- Background workers: hold cleanup, outbox relay, payment reconciliation. The outbox is written
+  but not delivered.
+- Redis, Kafka and Solr, which are deferred by the ADRs.
+
+The full status is in [`docs/requirements-checklist.md`](docs/requirements-checklist.md).
+
+## Running the tests
+
+**All suites, one command.** With the stack running (`docker compose up --build -d --wait`), from
+the repository root:
 
 ```bash
-curl 'http://localhost:3000/api/showtimes?cityId=1&date=2026-11-03&q=Intersteller'
+./run-tests.sh
 ```
 
-Search dates and the `localDate`/`localStartTime` fields are in the theater's city time zone
-(all sample cities: `America/Chicago`); `startsAt`/`endsAt` are UTC instants. Sample showtimes
-run from 2026-11-03 to 2027-01-31 (see `docs/sample-data.md`).
+It runs the backend unit and integration tests, the frontend unit tests and the Playwright E2E
+tests against the running stack, in that order. It stops at the first failure with a non-zero exit
+code. It also fails if the stack is not healthy, or if any suite reports a skipped test.
+It needs bash, curl, JDK 21, Node 22.18+ and Docker. It has been run on Linux only.
+On Windows, use WSL. The first E2E run on a new machine needs the browser's system libraries once:
+`cd frontend && npx playwright install --with-deps chromium` (uses sudo on Linux).
 
-## Cinéva web app (customer flow)
+Each suite can also be run on its own:
 
-The React app in `frontend/` (React 19, TypeScript, Vite, Tailwind CSS, Motion, Lucide) covers
-the customer flow only; there is no admin UI.
+| Suite | Command | Needs |
+|---|---|---|
+| Backend unit and integration (Testcontainers PostgreSQL 16) | `cd backend && ./mvnw -B clean verify` | JDK 21, Docker |
+| Frontend unit tests | `cd frontend && npm ci && npm test` | Node 22.18+ |
+| Frontend type-check and production build | `cd frontend && npm run build` | Node 22.18+ |
+| End-to-end (Playwright, Chromium) | see below | Node 22.18+, the Compose stack running |
 
-1. **Discover**: city, a 7-day date strip in the city's time zone, search, genre and language
-   filters. Results come from `GET /api/showtimes` and are grouped by movie.
-2. **Movie**: showtimes for one movie, grouped by theater.
-3. **Seats**: the live seat map (refreshed every 15 s), categories and prices, up to 10 seats.
-   Holding seats asks for sign-in if needed.
-4. **Checkout**: hold countdown, simulated payment outcome (`SUCCESS`, `DECLINE`, `TIMEOUT`),
-   retry after a decline, polling while a payment's outcome is `UNKNOWN`, hold release.
-5. **Confirmation**: a digital ticket built from the booking the server returned.
-
-Behavior worth knowing:
-
-- **Credentials are kept in memory only** (React state), never in `localStorage`,
-  `sessionStorage`, cookies or IndexedDB, and the bundle contains no credentials. Reloading the
-  page signs you out; checkout details (the API has no `GET /holds/{id}`) are also in memory, so
-  a reload during checkout returns you to browsing and the hold simply expires.
-- **Idempotency keys:** each payment attempt gets one random key. Network failures, gateway
-  errors and `SEATS_BUSY` keep the key, and "Retry" resends the identical request, so the
-  server's idempotency guarantees a single charge. A new key is created only after the attempt
-  was definitively declined. The app never retries a charge with a fresh key after an
-  ambiguous result; `UNKNOWN` outcomes are polled via `GET /api/payments/{id}`.
-- **Posters** are generated in the browser from each movie title (gradient and shapes chosen by
-  a hash; `src/lib/posters.ts`). No studio artwork is shipped, so there are no image rights to
-  clear and the app works offline.
-- **Fonts** are Inter and Fraunces from the `@fontsource-variable` npm packages (SIL Open Font
-  License 1.1), bundled and served locally. Icons are Lucide (ISC license).
-- Animations respect the operating system's reduced-motion setting.
-
-Frontend development without Docker (Node 22.18 or later):
-
-```bash
-cd frontend
-npm ci
-npm test            # unit tests (Node's built-in test runner)
-npm run build       # type-check and production build
-BACKEND_URL=http://localhost:3000 npm run dev   # Vite on :5173, API proxied to the Compose stack
-```
-
-## End-to-end tests (Playwright)
-
-Playwright drives Chromium against the real Compose stack at `http://localhost:3000`
-(override with `E2E_BASE_URL`). With the stack running (`docker compose up --build -d --wait`):
+**End-to-end tests:** with the stack running, from the repository root:
 
 ```bash
 cd frontend && npm ci && npx playwright install --with-deps chromium && npm run test:e2e
 ```
 
-After the first setup, `npm run test:e2e` alone runs the suite. Reports go to
-`frontend/playwright-report/`, and traces of failed tests to `frontend/test-results/`.
+- After the first setup, `npm run test:e2e` alone runs the suite.
+- The suite targets `http://localhost:3000`; set `E2E_BASE_URL` to change it.
+- Each test schedules its own showtime through the admin API, so runs are independent and need no
+  database reset. Those showtimes stay in the database until `docker compose down -v`.
+- Retries are disabled. Reports go to `frontend/playwright-report/`, and traces of failed tests to
+  `frontend/test-results/`.
 
-| Test (`frontend/e2e/`) | Covers |
-|---|---|
-| `booking.spec.ts`: a customer books seats and the booked seats become unavailable | Anonymous discovery → seats → sign-in → hold → `SUCCESS` → ticket (reference, seats, movie, theater, date, time, total) → seats shown as booked |
-| `booking.spec.ts`: a declined payment books nothing and a retry with a new attempt books exactly once | `DECLINE` → no ticket, seats still held → retry with a new idempotency key → one booking for exactly the chosen seats |
-| `seat-conflict.spec.ts`: a seat taken by another customer is removed from the selection… | Bob holds a seat Alice selected; Alice's hold is refused, the seat is deselected, and she books the rest |
+What each suite proves, and the latest results, are in
+[`docs/test-strategy.md`](docs/test-strategy.md). The latest results were 59 backend unit tests,
+132 integration tests, 34 frontend unit tests and 3 Playwright tests, all passing, on
+2026-11-02.
 
-Test data: each test schedules its own showtime of a seeded movie through
-`POST /api/admin/showtimes` (as the `admin.dallas` demo user, on Starlight Cinemas Downtown,
-on a random date after the seeded window). Every test therefore starts with untouched seats, so
-tests are independent, run in parallel, and need no database reset. Showtimes created by tests
-stay in the local database; `docker compose down -v` removes them. Retries are disabled so
-flaky failures are not hidden.
+## Repository structure
 
-## Backend tests
-
-```bash
-cd backend
-./mvnw -B clean verify   # unit tests + integration tests on Testcontainers PostgreSQL (needs Docker)
+```
+backend/                 Spring Boot application (Maven wrapper, Dockerfile)
+  src/main/java/com/moviebooking/
+    catalog/ theater/ booking/ payment/ admin/ security/ config/
+  src/main/resources/db/migration/   Flyway V1–V9 (schema, sample data, demo users)
+  src/test/java/         JUnit unit tests (*Test) and Testcontainers integration tests (*IT)
+frontend/                React + TypeScript + Vite app, nginx config, Dockerfile
+  src/                   pages, components, features, API client, unit tests (*.test.ts)
+  e2e/                   Playwright tests and fixtures
+docs/                    product scope, architecture, data model, API, tests, ADRs, AI workflow
+docker-compose.yml       postgres + backend + frontend
+.env.example             placeholder local settings (copy to .env)
+AGENTS.md                assignment constraints and working rules
 ```
 
 ## Known limitations
 
-- The Playwright suite finds Starlight's large screen through the seeded showtimes of the next
-  14 days, so it needs the seed window (until 2027-01-31) to still be in the future.
-- On the discover page, the search box updates the URL after a 300 ms debounce; clicking a
-  showtime within that window can be overridden by the late update and leave you on the
-  discover page. The E2E tests wait for the search to apply first. Not fixed.
-- No "my bookings" list (the API has no `GET /bookings`); a ticket is reachable from the
-  confirmation page right after booking, or by its URL while signed in.
-- The local stack is plain HTTP and binds to `127.0.0.1` only.
+- **Not production-ready, no scale claims:** one instance, plain HTTP, simulated payments, and no
+  load testing. The design notes for the 500,000-visitor target are in architecture §12.
+- **Payments:** the simulated provider has properties that real providers do not guarantee
+  (architecture §6.7). An `UNKNOWN` payment that nobody polls stays unresolved until a poll; its
+  hold still expires normally.
+- **Sample data window:** the seeded showtimes end on 2027-01-31. After that, discovery shows no
+  seeded showtimes, and the Playwright fixture, which finds a screen through the next 14 days of
+  seeded showtimes, fails.
+- **Search delay race:** on the discover page, the search box updates the URL after a 300 ms
+  delay. Clicking a showtime within that window can be overridden by the late update. Not fixed;
+  the E2E tests wait for the search to apply first.
+- **Reload during checkout:** checkout state lives only in memory, so a reload returns you to
+  browsing and the hold simply expires.
+- **Port conflicts:** host ports `3000` (frontend) and `5432` (PostgreSQL) must be free, or set
+  `FRONTEND_HOST_PORT` and `POSTGRES_HOST_PORT` in `.env`.
+
+### Troubleshooting: containers cannot reach each other
+
+If the stack starts but every API call through `http://localhost:3000` hangs or ends in a gateway error, the
+host firewall may be dropping traffic between containers. In the Cursor cloud agent VM used to
+build this project, a stale `iptables-legacy` `FORWARD` policy of `DROP` did exactly that. It
+needed a one-time `sudo iptables-legacy -P FORWARD ACCEPT`. This is a property of that VM, not of
+the project, and standard Docker Desktop or Docker Engine installs do not need it.

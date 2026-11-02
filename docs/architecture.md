@@ -1,8 +1,10 @@
 # Architecture
 
-> **Status: DESIGN, PARTLY IMPLEMENTED.** This document describes the intended design. Section 13
-> tracks what is actually implemented and how it was verified. Any statement below such as "the
-> system does X" describes the target design unless §13 says otherwise.
+> **Status: DESIGN, IMPLEMENTED EXCEPT WHERE NOTED.** This document was written as the design
+> before the code and has been kept in step with it. Section 13 records what is implemented and
+> how it was verified. The items marked "not implemented" (`GET /holds/{id}`, `GET /bookings`,
+> showtime cancellation, background workers) remain design only. The implemented schema is in
+> `docs/data-model.md`, and the implemented API in `docs/api.md`.
 >
 > Revision 2 applies design decisions approved by the engineering owner during review of PR #1
 > (see `docs/ai-workflow.md` §4). Those were decisions about the *design*, made before any code
@@ -67,7 +69,7 @@ flowchart LR
 
 ## 3. Packages and ownership
 
-| Package | Owns | Tables (proposed) |
+| Package | Owns | Tables |
 |---|---|---|
 | `catalog` | Movies, languages, genres; showtime search query | `movie`, `genre`, `movie_genre` |
 | `theater` | Cities, theaters, screens, physical seats, showtimes; creating `show_seat` rows when a showtime is created | `city`, `theater`, `screen`, `seat`, `showtime` |
@@ -91,9 +93,13 @@ Rules:
 - Package boundaries are enforced by convention and review. No ArchUnit or Spring Modulith
   test is planned for the MVP.
 
-## 4. Data model (proposed)
+## 4. Data model
 
 ### 4.1 Entity-relationship diagram
+
+This is the design-time view of the booking core. The complete ERD of the implemented schema
+(all tables in V1–V9, including `language`, `genre`, `simulated_provider_charge` and
+`city.time_zone`) is in **`docs/data-model.md`**, which is authoritative.
 
 ```mermaid
 erDiagram
@@ -527,15 +533,22 @@ existing booking. The `UNIQUE (hold_id)` constraint is the backstop.
 
 ### 8.1 Permissions
 
-| Action | Anonymous | Customer | Theater Admin |
-|---|---|---|---|
-| Search showtimes, view showtime and seat map | ✔ | ✔ | ✔ |
-| Create a hold | — (401) | ✔ | — (403) |
-| View, release, or pay for a hold | — (401) | Own holds only (others: 404) | — (403) |
-| View payment status | — (401) | Own attempts only (others: 404) | — (403) |
-| View own bookings | — (401) | ✔ | — (403) |
-| Create a showtime | — (401) | — (403) | Only for theaters they are assigned to (others: 403) |
-| Cancel a showtime (stretch) | — (401) | — (403) | Assigned theaters only; only with no bookings and no active holds |
+| Action | Anonymous | Customer | Theater Admin | Implemented |
+|---|---|---|---|---|
+| Search showtimes, view showtime and seat map | ✔ | ✔ | ✔ | Yes |
+| View own profile (`GET /auth/me`) | — (401) | ✔ | ✔ | Yes |
+| Create a hold | — (401) | ✔ | — (403) | Yes |
+| Release or pay for a hold | — (401) | Own holds only (others: 404) | — (403) | Yes |
+| View a hold (`GET /holds/{id}`) | — (401) | Own holds only (others: 404) | — (403) | **No** |
+| View payment status | — (401) | Own attempts only (others: 404) | — (403) | Yes |
+| View a booking (`GET /bookings/{id}`) | — (401) | Own bookings only (others: 404) | — (403) | Yes |
+| List own bookings (`GET /bookings`) | — (401) | ✔ | — (403) | **No** |
+| Create a showtime | — (401) | — (403) | Only for theaters they are assigned to (others: 403) | Yes |
+| Cancel a showtime (stretch) | — (401) | — (403) | Assigned theaters only; only with no bookings and no active holds | **No** |
+
+The implemented rows are covered by `SecurityIT`, `ApplicationContextWithoutDatabaseTest`,
+`HoldApiIT`, `PaymentApiIT`, `DiscoveryApiIT` and `AdminShowtimeApiIT` (see
+`docs/requirements-checklist.md` §5).
 
 Theater scoping is checked in the service layer (`AdminShowtimeService`) against the
 `theater_admin_assignment` rows loaded with the principal; the theater is derived from the
@@ -551,7 +564,12 @@ implemented as `permitAll` for `GET` on the five browsing paths only (Task 06).
   built, delivery is at-least-once and consumers must deduplicate by event id.
 - This is the integration seam where Kafka could later be attached (ADR 0002).
 
-## 10. API (proposed)
+## 10. API
+
+This is the design table, annotated with implementation status. The reference for the
+implemented endpoints, with real request and response examples and the complete error codes
+(including `HOLD_CONVERTED` for releasing a booked hold), is **`docs/api.md`**. Not implemented:
+`GET /holds/{id}` and `GET /bookings`.
 
 All paths are under `/api`. Errors use a JSON body `{ "code": "…", "message": "…", "details": … }`.
 
@@ -572,7 +590,8 @@ All paths are under `/api`. Errors use a JSON body `{ "code": "…", "message": 
 | `GET /auth/me` | authenticated | Current user id, username, display name and role (used by the React login flow) |
 | `POST /admin/showtimes` (body: `movieId`, `screenId`, `languageCode`, `startsAtLocal`, `standardPrice`, `premiumPrice`) | theater admin (scoped by the screen's theater) | 201 with seat inventory; 400 `INVALID_REQUEST` (`details.fields`) / `INVALID_START_TIME` (past, DST gap or overlap); 403 not assigned; 409 `SHOWTIME_OVERLAP` / `SCREEN_BUSY` (implemented; replaces the proposed `/admin/theaters/{theaterId}/showtimes`) |
 
-The final API reference (`docs/api.md`) is written in Phase 7 from the implemented code.
+`docs/api.md` was written in the final audit from the implemented controllers and the running
+stack.
 
 ## 11. Search (implemented in Task 06)
 
@@ -630,19 +649,21 @@ and Kafka would be added only when measurements justify them (ADRs 0001–0003).
 | Security (HTTP Basic, seeded users, scoping) | Implemented (PR #2). Since Task 06, the browsing `GET` endpoints and the seat map are anonymous as §8.1 requires; holds, payments, bookings and admin endpoints are unchanged. |
 | Catalog & search | Implemented (Task 06): `GET /cities`, `/movies`, `/showtimes`, `/showtimes/{id}` (§10, §11). Verified by `DiscoveryApiIT` on Testcontainers. |
 | Theater & showtimes | Implemented (Task 06): admin showtime creation with seat inventory, DST-aware local start times, overlap rejection by the exclusion constraint, per-screen lock (§5.1). Verified by `AdminShowtimeApiIT` on Testcontainers. Showtime cancellation not implemented. |
-| Seat holds & locking | Implemented (Phase 2): create hold, release hold, seat map (§5.3, §5.4, §5.6). Locks use native `SELECT … FOR UPDATE`. Verified on local PostgreSQL 16 only; Testcontainers not run. The §5.6 `PAYMENT_IN_PROGRESS` release check was added in Phase 3. **Not yet implemented:** `GET /holds/{id}`. |
-| Simulated payment & attempt states | Implemented (Phase 3): provider with ledger and transaction guard, attempt states, idempotency, on-demand resolution (§6). Verified on local PostgreSQL 16 only; Testcontainers not run. No background reconciliation (by design). |
+| Seat holds & locking | Implemented (Phase 2): create hold, release hold, seat map (§5.3, §5.4, §5.6). Locks use native `SELECT … FOR UPDATE`. First verified on local PostgreSQL 16; since Task 06 verified on Testcontainers (`HoldApiIT`, `HoldConcurrencyIT`). The §5.6 `PAYMENT_IN_PROGRESS` release check was added in Phase 3. **Not yet implemented:** `GET /holds/{id}`. |
+| Simulated payment & attempt states | Implemented (Phase 3): provider with ledger and transaction guard, attempt states, idempotency, on-demand resolution (§6). First verified on local PostgreSQL 16; since Task 06 verified on Testcontainers (`PaymentApiIT`, `PaymentConcurrencyIT`, `SimulatedProviderFenceIT`). No background reconciliation (by design). |
 | Booking confirmation & outbox write | Implemented (Phase 3): TX3 (§6.8), `GET /bookings/{id}`. The outbox is written, not relayed. **Not yet implemented:** `GET /bookings` (list). |
 | Admin endpoint (create showtime) | Implemented (Task 06): `POST /admin/showtimes`, theater-scoped (§8.1). No admin UI. |
 | React UI | Implemented (Task 07): customer flow only (discover, movie, seats, checkout, ticket); no admin UI. Frontend unit tests (Node test runner) cover the API client, payment-outcome classification and helpers. Booking flows (success after decline, timeout/`UNKNOWN` polling, seat conflict, admin refused, hold expiry) were exercised in headless Chrome against the Compose stack by a throwaway script in Task 07. Since Task 08, the booking, decline-retry and seat-conflict flows are covered by the Playwright suite. |
 | Integration / concurrency tests | Security, schema, hold, payment, discovery and admin ITs. Earlier phases ran them on local PostgreSQL 16 only. In Task 06 Docker was installed in the agent VM and the **whole suite ran on Testcontainers for the first time**: 132/132 ITs and 59/59 unit tests passed. |
 | Playwright E2E tests | Implemented (Task 08): `frontend/e2e/`, Chromium only, 3 tests (successful booking, decline then retry with a new key, seat conflict between customers). Each test schedules its own showtime through the admin API. Verified in the agent VM: after `docker compose down -v` and `docker compose up --build`, `npm run test:e2e` passed 3/3 on two consecutive runs; earlier, `--repeat-each=5` passed 15/15. Timeout/`UNKNOWN`, keyboard and mobile E2E tests are not implemented. |
+| Final audit (2026-11-02) | From a clean database: backend 59/59 unit tests and 132/132 integration tests (Testcontainers), frontend 34/34 unit tests and the build, and Playwright 3/3 on two runs. The README steps were also followed in a fresh clone. Details in `docs/test-strategy.md` and `docs/requirements-checklist.md` §10. |
+| Required documentation | Complete in the final audit: `README.md`, `docs/requirements-checklist.md`, `docs/data-model.md`, `docs/api.md`, `docs/test-strategy.md`, and updates to this file, the product scope, the ADRs and the AI workflow record. |
 
 Update this table only after a phase's verification checkpoint has actually passed.
 
 ## 14. Decisions resolved in revision 2 and remaining open items
 
-**Resolved by the engineering owner (design decisions; not yet implemented):**
+**Resolved by the engineering owner (design decisions made before the code; all are now implemented and tested, see §13):**
 - Expired holds are never converted; a late capture is voided (§6.3).
 - Payment attempt states, idempotency, retry with a new key, and unknown outcomes are defined
   (§6.2–§6.7).
@@ -654,9 +675,10 @@ Update this table only after a phase's verification checkpoint has actually pass
 - Concrete packages with no speculative interfaces; boundaries enforced by convention and
   review (§1, §3).
 
-**Still open (proposed defaults are in the text; confirm during review):**
+**Still open (the defaults below are implemented; the owner has not formally confirmed them):**
 1. Exact values: hold TTL (8 min), lock timeout (2 s), payment client timeout (5 s), minimum
-   remaining hold time (60 s), maximum attempts per hold (3).
+   remaining hold time (60 s), maximum attempts per hold (3). They are configured in
+   `backend/src/main/resources/application.yml`, except the attempt limit, which is a constant.
 2. Whether `TIMEOUT` should also have a "not captured" variant to exercise
    `UNKNOWN → DECLINED (NOT_FOUND)` through the UI, or only through integration tests.
 3. Response code for `SEATS_BUSY`: 409 (proposed) or 503 with `Retry-After`.
