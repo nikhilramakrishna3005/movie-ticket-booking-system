@@ -1,7 +1,7 @@
 # ADR 0001: Defer Redis (caching, seat holds, rate limiting)
 
 - **Status:** Proposed
-- **Date:** 2026-11-02
+- **Date:** 2026-11-02 (revised 2026-11-02 after review of PR #1)
 - **Deciders:** _Pending human review_
 
 ## Context / Problem
@@ -22,18 +22,20 @@ designates **PostgreSQL as the authoritative source of seat ownership**.
 |---|---|
 | A. Redis for seat holds | Holds live in Redis with TTL; PostgreSQL stores only confirmed bookings. |
 | B. Redis as a read cache only | PostgreSQL owns all seat state; Redis caches read-heavy data. |
-| C. No Redis; PostgreSQL holds + in-process cache where needed | Holds are rows in `show_seat` with `hold_expires_at`; lazy expiry; optional Caffeine cache for static catalog data. |
+| C. No Redis; PostgreSQL holds, no cache | Holds are rows in `show_seat` with `hold_expires_at`; lazy expiry; reads go to PostgreSQL. |
 
 ## Decision
 
-**Option C for the assessment build. Redis is deferred.**
+**Option C for the assessment build. Redis is deferred.** No cache of any kind (including
+in-process caches) is added unless a measured problem justifies it.
 
 - Seat holds are stored in PostgreSQL in the same rows that are locked for booking, so hold
   and booking state cannot diverge.
-- Lazy expiry (an expired hold is treated as available inside the locking transaction) gives
-  TTL semantics without Redis.
-- If catalog reads need caching during development, an in-process cache is sufficient for a
-  single local instance.
+- Lazy expiry gives TTL semantics without Redis and without a background worker. Inside the
+  locking transaction, a hold whose `expires_at <= now` (with `now` taken from the injected UTC
+  `Clock` and passed to SQL) is treated as expired.
+- An expired hold is never converted into a booking (`docs/architecture.md` §6.3). Keeping
+  holds and bookings in the same database makes this check a single locked read.
 
 ## Tradeoffs
 

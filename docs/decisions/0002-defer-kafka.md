@@ -1,7 +1,7 @@
 # ADR 0002: Defer Kafka (booking events and downstream integration)
 
 - **Status:** Proposed
-- **Date:** 2026-11-02
+- **Date:** 2026-11-02 (revised 2026-11-02 after review of PR #1)
 - **Deciders:** _Pending human review_
 
 ## Context / Problem
@@ -30,10 +30,13 @@ the database commit (a "dual write") risks losing events on a crash between comm
 
 **Option C for the assessment build. Kafka is deferred.**
 
-- The `booking` module writes an `outbox_event` row in the same transaction that creates the
-  booking, so the event exists exactly when the booking exists.
-- A scheduled relay (`FOR UPDATE SKIP LOCKED`) delivers events to a stub notifier and marks them
-  published. Delivery is at-least-once; consumers deduplicate by event id.
+- **Required:** the `booking` package writes an `outbox_event` row in the same transaction that
+  creates the booking, so the event exists exactly when the booking exists. Tests assert this.
+- **Stretch (on the cut list):** a scheduled relay (`FOR UPDATE SKIP LOCKED`) that delivers
+  events to a stub notifier and marks them published. Delivery would be at-least-once, so
+  consumers deduplicate by event id. It is a background worker, and per the review of PR #1,
+  background workers are cut before correctness or required verification. If it is cut, the
+  outbox rows remain the documented integration seam and are not delivered.
 - The outbox table is the seam where Kafka could later be attached (Option B) without changing
   the booking transaction.
 

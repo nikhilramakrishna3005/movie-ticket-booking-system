@@ -1,7 +1,7 @@
 # ADR 0003: Defer Apache Solr (typo-tolerant search)
 
 - **Status:** Proposed
-- **Date:** 2026-11-02
+- **Date:** 2026-11-02 (revised 2026-11-02 after review of PR #1)
 - **Deciders:** _Pending human review_
 
 ## Context / Problem
@@ -30,7 +30,9 @@ applied to short fields (titles and theater names).
 - Enable `pg_trgm`; add GIN trigram indexes on movie title and theater name.
 - Combine trigram similarity (ranking + threshold) with structured filters for city, language,
   genre, and showtime date.
-- Hide the implementation behind a `catalog` search service interface so it can be replaced.
+- Keep the search in a single query in the `catalog` package. No interface is introduced
+  speculatively. Replacing it later would mean changing one class, plus adding an indexing
+  pipeline.
 
 ## Tradeoffs
 

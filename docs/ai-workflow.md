@@ -45,17 +45,34 @@
 
 ## 4. Review findings
 
-_Placeholder — to be filled in with actual findings from human review of AI-produced work.
-Do not pre-populate._
+Record only findings from human reviews that actually took place. Do not pre-populate.
 
-| Date | Phase / PR | Finding | Action taken |
+### 4.1 PR #1: planning documents (Phase 0)
+
+- **What was reviewed:** the AI-drafted planning documents only. **No application code exists.**
+  Nothing below is verification of code, tests, or runtime behavior.
+- **Outcome:** changes requested by the human engineering owner (2026-11-02). The owner
+  approved the following design decisions, which revision 2 of the documents applies as
+  **proposed review corrections**. They remain unimplemented and unverified until the
+  corresponding phases pass their checkpoints.
+
+| Date | Phase / PR | Finding / decision from review | Action taken (documentation only) |
 |---|---|---|---|
-| | | | |
+| 2026-11-02 | Phase 0 / PR #1 | Expired holds: the draft proposed allowing conversion of an expired hold if its seats were still free. Owner decided an expired hold is **never** converted; a late capture is voided. | Updated architecture §6.3/§6.8, AC-B5, F6, and the Phase 3 checkpoint. |
+| 2026-11-02 | Phase 0 / PR #1 | Payment retries: precise attempt states, no double charge per idempotency key, new key after a decline, unknown outcomes not treated as declines, and honest crash-recovery limits were required. | Added architecture §6.2–§6.7, AC-B3/B4/B6/B7, F5/F7–F10. |
+| 2026-11-02 | Phase 0 / PR #1 | Time: the draft left the DB `NOW()` vs. application `Clock` choice open. Owner decided on an injectable UTC `Clock` everywhere, passed to SQL, and multi-instance skew documented as a limitation. | Added architecture §7; `AGENTS.md` coding standards. |
+| 2026-11-02 | Phase 0 / PR #1 | Auth: the draft left the mechanism open. Owner decided on HTTP Basic + Spring Security with seeded demo users, no persistent browser storage of credentials, theater-scoped admin and hold-ownership checks, and HTTPS required for real deployment. | Added architecture §8 and §8.1; product scope §2; AC-U1–U4; `AGENTS.md` secrets section. |
+| 2026-11-02 | Phase 0 / PR #1 | Concurrency: deterministic lock order, a bounded lock wait, an explicit unique booked-seat constraint, held vs. booked semantics, missing/duplicate seat ids, overlapping requests, and an implementable one-active-hold rule were required. | Added architecture §4.2, §4.3, §5; AC-H4/H5/H7/H8. |
+| 2026-11-02 | Phase 0 / PR #1 | Modular monolith: the draft described "public API (service interfaces)" and a `PaymentGateway` interface. Owner asked to avoid speculative interfaces and excess layers. | Concrete service classes; `SimulatedPaymentProvider` as one class; notification package folded into `booking`; `AGENTS.md` §3. |
+| 2026-11-02 | Phase 0 / PR #1 | Time management: prioritize Compose clean start, real-PostgreSQL tests, concurrency tests, and 2 Playwright tests; cut admin UI and background workers first; account for required docs. | Rewrote `docs/implementation-plan.md`. |
+| 2026-11-02 | Phase 0 / PR #1 | Documentation accuracy: keep all features marked proposed; record review corrections without claiming verification. | This section; status banners in all documents. |
 
 ## 5. AI mistakes observed
 
 _Placeholder — to be filled in with actual mistakes made by AI assistance (e.g. incorrect
-code, false claims, scope creep) and how they were caught. Do not pre-populate._
+code, false claims, scope creep) and how they were caught. Do not pre-populate. Whether any
+item in §4.1 counts as an AI mistake (rather than a design choice the owner changed) is for
+the human owner to classify; none have been entered here._
 
 | Date | Phase / PR | Mistake | How it was caught | Correction |
 |---|---|---|---|---|
