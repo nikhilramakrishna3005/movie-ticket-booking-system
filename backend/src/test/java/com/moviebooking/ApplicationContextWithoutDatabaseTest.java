@@ -37,19 +37,21 @@ import com.moviebooking.booking.BookingSeatRepository;
 import com.moviebooking.booking.OutboxEventRepository;
 import com.moviebooking.booking.SeatHoldRepository;
 import com.moviebooking.booking.ShowSeatRepository;
+import com.moviebooking.catalog.CatalogQueryRepository;
 import com.moviebooking.catalog.MovieRepository;
 import com.moviebooking.payment.PaymentAttemptRepository;
 import com.moviebooking.payment.SimulatedPaymentProvider;
 import com.moviebooking.security.AppUser;
 import com.moviebooking.security.AppUserRepository;
 import com.moviebooking.security.Role;
+import com.moviebooking.theater.CityRepository;
 import com.moviebooking.theater.SeatRepository;
 import com.moviebooking.theater.ShowtimeRepository;
 
 /**
  * Loads the application context with the real security configuration but without database
  * auto-configuration, so it runs where Docker is unavailable. Repositories are mocked; the same
- * flows against PostgreSQL are covered by {@code SecurityIT} and {@code HoldApiIT}.
+ * flows against PostgreSQL are covered by {@code SecurityIT}, {@code HoldApiIT} and {@code DiscoveryApiIT}.
  */
 @SpringBootTest(properties = "spring.autoconfigure.exclude="
         + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
@@ -57,7 +59,7 @@ import com.moviebooking.theater.ShowtimeRepository;
         + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration")
 @AutoConfigureMockMvc
 @MockitoBean(types = { BookingRepository.class, BookingSeatRepository.class, OutboxEventRepository.class,
-        MovieRepository.class })
+        MovieRepository.class, CatalogQueryRepository.class, CityRepository.class })
 class ApplicationContextWithoutDatabaseTest {
 
     private static final String PASSWORD = "test-only-password";
@@ -269,6 +271,26 @@ class ApplicationContextWithoutDatabaseTest {
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(holds, paymentAttempts, provider);
+    }
+
+    @Test
+    void browsingIsAnonymousWhileHoldsPaymentsAndBookingsStayProtected() throws Exception {
+        mockMvc.perform(get("/api/cities")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/movies")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/showtimes")).andExpect(status().isOk());
+        // Unknown in the mocked repositories: reaching 404 proves the request was not stopped at 401.
+        mockMvc.perform(get("/api/showtimes/1")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/showtimes/1/seats")).andExpect(status().isNotFound());
+
+        mockMvc.perform(post("/api/showtimes/1/holds").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"seatIds\":[1]}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/showtimes/1/seats")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/holds/{id}", UUID.randomUUID())).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/payments/{id}", UUID.randomUUID())).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/bookings/{id}", UUID.randomUUID())).andExpect(status().isUnauthorized());
 
         verifyNoInteractions(holds, paymentAttempts, provider);
     }

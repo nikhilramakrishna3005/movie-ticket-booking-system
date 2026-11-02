@@ -51,6 +51,10 @@ public class SecurityConfig {
                         // already authorized, instead of masking them as 401.
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        // Browsing is anonymous (docs/architecture.md §8.1). These patterns match single
+                        // path segments only, so nothing below /api/showtimes/{id}/seats is opened.
+                        .requestMatchers(HttpMethod.GET, "/api/cities", "/api/movies", "/api/showtimes",
+                                "/api/showtimes/*", "/api/showtimes/*/seats").permitAll()
                         .requestMatchers("/api/admin/**").hasRole(Role.THEATER_ADMIN.name())
                         .requestMatchers(HttpMethod.POST, "/api/showtimes/*/holds").hasRole(Role.CUSTOMER.name())
                         .requestMatchers("/api/holds/**", "/api/payments/**", "/api/bookings/**")
