@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+
+/* Design tokens. Surfaces step up from near-black; violet is the only accent and is reserved
+   for primary actions, selection and focus. */
+@theme {
+  --color-ink-950: #0b0a10;
+  --color-ink-900: #111019;
+  --color-ink-850: #16141f;
+  --color-ink-800: #1c1a27;
+  --color-ink-700: #272436;
+  --color-ink-600: #36324a;
+  --color-ink-500: #4b4663;
+
+  --color-mist-50: #f5f3fa;
+  --color-mist-200: #d9d5e6;
+  --color-mist-400: #a19bb8;
+  --color-mist-500: #7f7997;
+
+  --color-violet-300: #c4b5fd;
+  --color-violet-400: #a78bfa;
+  --color-violet-500: #8b5cf6;
+  --color-violet-600: #7c3aed;
+
+  --color-gold-300: #f3d38b;
+  --color-success-400: #4ade80;
+  --color-danger-400: #f87171;
+  --color-warning-400: #fbbf24;
+
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces Variable', ui-serif, Georgia, serif;
+
+  --shadow-glow: 0 0 0 1px rgb(167 139 250 / 0.35), 0 8px 30px -8px rgb(124 58 237 / 0.55);
+  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 20px 40px -24px rgb(0 0 0 / 0.8);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-ink-950 font-sans text-mist-200;
+    min-height: 100dvh;
+    background-image:
+      radial-gradient(60rem 30rem at 85% -10%, rgb(124 58 237 / 0.12), transparent 60%),
+      radial-gradient(40rem 24rem at -10% 10%, rgb(76 42 133 / 0.12), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-violet-400;
+  }
+
+  ::selection {
+    background: rgb(139 92 246 / 0.4);
+  }
+}
+
+@layer components {
+  .surface {
+    @apply rounded-2xl border border-white/6 bg-ink-900/80 shadow-card backdrop-blur-sm;
+  }
+
+  .eyebrow {
+    @apply text-[0.7rem] font-semibold tracking-[0.18em] text-mist-500 uppercase;
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded-lg bg-ink-800;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
