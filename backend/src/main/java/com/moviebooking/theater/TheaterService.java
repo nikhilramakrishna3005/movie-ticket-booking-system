@@ -24,6 +24,14 @@ public class TheaterService {
         return showtimes.findById(showtimeId).orElseThrow(ResourceNotFoundException::new);
     }
 
+    public ShowtimeDetails getShowtimeDetails(long showtimeId) {
+        Showtime showtime = getShowtime(showtimeId);
+        ShowtimeRepository.VenueNames venue = showtimes.findVenueNames(showtimeId)
+                .orElseThrow(ResourceNotFoundException::new);
+        return new ShowtimeDetails(showtimeId, showtime.getMovieId(), showtime.getScreenId(), showtime.getStartsAt(),
+                venue.getTheaterName(), venue.getScreenName(), venue.getCityName() + ", " + venue.getStateCode());
+    }
+
     /** Seats of a screen in display order (row, then seat number). */
     public List<Seat> getSeats(long screenId) {
         return seats.findByScreenIdOrderByRowLabelAscSeatNumberAsc(screenId);

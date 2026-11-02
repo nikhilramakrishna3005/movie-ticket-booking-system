@@ -108,6 +108,11 @@ public class SeatHold implements Persistable<UUID> {
         status = HoldStatus.RELEASED;
     }
 
+    void convert() {
+        requireActive();
+        status = HoldStatus.CONVERTED;
+    }
+
     private void requireActive() {
         if (status != HoldStatus.ACTIVE) {
             throw new IllegalStateException("Hold " + id + " is " + status + ", not ACTIVE");

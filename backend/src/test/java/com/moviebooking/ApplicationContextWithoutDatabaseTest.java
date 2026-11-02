@@ -32,8 +32,14 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import com.moviebooking.booking.BookingRepository;
+import com.moviebooking.booking.BookingSeatRepository;
+import com.moviebooking.booking.OutboxEventRepository;
 import com.moviebooking.booking.SeatHoldRepository;
 import com.moviebooking.booking.ShowSeatRepository;
+import com.moviebooking.catalog.MovieRepository;
+import com.moviebooking.payment.PaymentAttemptRepository;
+import com.moviebooking.payment.SimulatedPaymentProvider;
 import com.moviebooking.security.AppUser;
 import com.moviebooking.security.AppUserRepository;
 import com.moviebooking.security.Role;
@@ -50,6 +56,8 @@ import com.moviebooking.theater.ShowtimeRepository;
         + "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration,"
         + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration")
 @AutoConfigureMockMvc
+@MockitoBean(types = { BookingRepository.class, BookingSeatRepository.class, OutboxEventRepository.class,
+        MovieRepository.class })
 class ApplicationContextWithoutDatabaseTest {
 
     private static final String PASSWORD = "test-only-password";
@@ -77,6 +85,13 @@ class ApplicationContextWithoutDatabaseTest {
 
     @MockitoBean
     private SeatHoldRepository holds;
+
+    @MockitoBean
+    private PaymentAttemptRepository paymentAttempts;
+
+    // Replaced as a whole: the real provider needs a transaction manager, absent in this context.
+    @MockitoBean
+    private SimulatedPaymentProvider provider;
 
     @BeforeEach
     void stubUsers() {
@@ -209,6 +224,53 @@ class ApplicationContextWithoutDatabaseTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(showtimes, seats, showSeats, holds);
+    }
+
+    @Test
+    void paymentAndBookingEndpointsAreForCustomersOnly() throws Exception {
+        UUID id = UUID.randomUUID();
+        mockMvc.perform(post("/api/holds/{id}/payment", id).header("Idempotency-Key", "k")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"scenario\":\"SUCCESS\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/holds/{id}/payment", id).with(httpBasic("dana", PASSWORD))
+                        .header("Idempotency-Key", "k")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"scenario\":\"SUCCESS\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/payments/{id}", id).with(httpBasic("dana", PASSWORD)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/bookings/{id}", id).with(httpBasic("dana", PASSWORD)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/bookings/{id}", id))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(holds, paymentAttempts, provider);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "", "   ", "missing", "too-long" })
+    void invalidIdempotencyKeysAreRejectedBeforeAnyDatabaseAccess(String key) throws Exception {
+        var request = post("/api/holds/{id}/payment", UUID.randomUUID()).with(httpBasic("carol", PASSWORD))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"scenario\":\"SUCCESS\"}");
+        if (!key.equals("missing")) {
+            request.header("Idempotency-Key", key.equals("too-long") ? "k".repeat(101) : key);
+        }
+        mockMvc.perform(request)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(holds, paymentAttempts, provider);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "{}", "{\"scenario\":\"STEAL\"}", "not json" })
+    void invalidPaymentBodiesAreRejectedBeforeAnyDatabaseAccess(String body) throws Exception {
+        mockMvc.perform(post("/api/holds/{id}/payment", UUID.randomUUID()).with(httpBasic("carol", PASSWORD))
+                        .header("Idempotency-Key", "k")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(holds, paymentAttempts, provider);
     }
 
     @Test

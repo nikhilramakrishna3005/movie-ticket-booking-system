@@ -53,7 +53,8 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole(Role.THEATER_ADMIN.name())
                         .requestMatchers(HttpMethod.POST, "/api/showtimes/*/holds").hasRole(Role.CUSTOMER.name())
-                        .requestMatchers("/api/holds/**").hasRole(Role.CUSTOMER.name())
+                        .requestMatchers("/api/holds/**", "/api/payments/**", "/api/bookings/**")
+                        .hasRole(Role.CUSTOMER.name())
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll());
         return http.build();
