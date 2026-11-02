@@ -46,7 +46,7 @@ class DatabaseSchemaIT {
         var versions = jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class);
 
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9");
     }
 
     @Test
@@ -97,6 +97,26 @@ class DatabaseSchemaIT {
         assertThat(titles).contains("Interstellar");
         assertThat(count("SELECT count(*) FROM pg_indexes WHERE indexname IN "
                 + "('movie_title_trgm_idx', 'theater_name_trgm_idx')")).isEqualTo(2);
+    }
+
+    @Test
+    void seededCitiesAreInCentralTime() {
+        var zones = jdbc.queryForList("SELECT DISTINCT time_zone FROM city", String.class);
+
+        assertThat(zones).containsExactly("America/Chicago");
+    }
+
+    @Test
+    void aCityMustStateAnIanaTimeZone() {
+        assertViolation(() -> jdbc.update("INSERT INTO city (name, state_code) VALUES ('El Paso', 'TX')"),
+                "23502", "time_zone");
+    }
+
+    @Test
+    void aCityTimeZoneMustLookLikeAnIanaZoneId() {
+        assertViolation(() -> jdbc.update(
+                        "INSERT INTO city (name, state_code, time_zone) VALUES ('El Paso', 'TX', 'CST')"),
+                CHECK_VIOLATION, "city_time_zone_ck");
     }
 
     // --- booked seats -----------------------------------------------------------------------
