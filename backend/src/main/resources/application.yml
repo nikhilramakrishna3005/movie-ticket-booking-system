@@ -18,6 +18,11 @@ spring:
   flyway:
     locations: classpath:db/migration
 
+booking:
+  hold-ttl: 8m
+  # Upper bound on any row-lock wait in hold transactions; exceeding it returns 409 SEATS_BUSY.
+  lock-timeout: 2s
+
 server:
   # Honors X-Forwarded-* from a same-origin reverse proxy in front of the React app and the API.
   # The backend port must then only be reachable through that proxy.
