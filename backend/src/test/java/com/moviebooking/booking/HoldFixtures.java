@@ -27,10 +27,18 @@ final class HoldFixtures {
         this.jdbc = jdbc;
     }
 
-    /** Restores the seeded state: no holds, all seats AVAILABLE, no cancelled showtimes, no test users. */
+    /**
+     * Restores the seeded state: no holds, payments or bookings, all seats AVAILABLE, no
+     * cancelled showtimes, no test users. Deletes follow the foreign keys.
+     */
     void reset() {
-        jdbc.update("UPDATE show_seat SET status = 'AVAILABLE', hold_id = NULL, hold_expires_at = NULL"
-                + " WHERE status = 'HELD'");
+        jdbc.update("DELETE FROM outbox_event");
+        jdbc.update("UPDATE show_seat SET status = 'AVAILABLE', hold_id = NULL, hold_expires_at = NULL,"
+                + " booking_id = NULL WHERE status <> 'AVAILABLE'");
+        jdbc.update("DELETE FROM booking_seat");
+        jdbc.update("DELETE FROM booking");
+        jdbc.update("DELETE FROM payment_attempt");
+        jdbc.update("DELETE FROM simulated_provider_charge");
         jdbc.update("DELETE FROM seat_hold");
         jdbc.update("UPDATE showtime SET status = 'SCHEDULED' WHERE status = 'CANCELLED'");
         jdbc.update("DELETE FROM app_user WHERE username LIKE ?", TEST_USER_PREFIX + "%");
@@ -117,6 +125,37 @@ final class HoldFixtures {
     String seatStatus(long showtimeId, long seatId) {
         return jdbc.queryForObject("SELECT status FROM show_seat WHERE showtime_id = ? AND seat_id = ?",
                 String.class, showtimeId, seatId);
+    }
+
+    long count(String table) {
+        return jdbc.queryForObject("SELECT count(*) FROM " + table, Long.class);
+    }
+
+    String paymentStatus(UUID paymentId) {
+        return jdbc.queryForObject("SELECT status FROM payment_attempt WHERE id = ?", String.class, paymentId);
+    }
+
+    String failureReason(UUID paymentId) {
+        return jdbc.queryForObject("SELECT failure_reason FROM payment_attempt WHERE id = ?", String.class,
+                paymentId);
+    }
+
+    /** Status of the simulated provider's ledger entry for this key, or null if none exists. */
+    String ledgerStatus(String idempotencyKey) {
+        return jdbc.queryForList("SELECT status FROM simulated_provider_charge WHERE idempotency_key = ?",
+                String.class, idempotencyKey).stream().findFirst().orElse(null);
+    }
+
+    /** Seat ids whose show_seat row is BOOKED by this booking. */
+    List<Long> seatsBookedBy(UUID bookingId) {
+        return jdbc.queryForList(
+                "SELECT seat_id FROM show_seat WHERE booking_id = ? AND status = 'BOOKED' ORDER BY seat_id",
+                Long.class, bookingId);
+    }
+
+    List<Long> bookingSeatIds(UUID bookingId) {
+        return jdbc.queryForList("SELECT seat_id FROM booking_seat WHERE booking_id = ? ORDER BY seat_id",
+                Long.class, bookingId);
     }
 
     private static AuthenticatedUser customer(long id, String username) {
