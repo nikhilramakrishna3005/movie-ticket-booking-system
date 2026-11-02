@@ -21,8 +21,10 @@ rows. It does not depend on the date the migrations run, and it contains no `NOW
 | Showtimes | 1,080: every screen, every day, 2 shows per day |
 | Seat inventory (`show_seat`) | 54,000 rows, all `AVAILABLE`. Prices: $12.50 standard, $16.00 premium. |
 
-**Users are not seeded yet.** Demo customers and theater admins (with BCrypt hashes) will be
-added in a new migration together with the HTTP Basic security configuration.
+**Users** are seeded separately by `V8__demo_users.sql`: two customers (`alice`, `bob`) and two
+theater admins, `admin.dallas` (assigned to Starlight Cinemas Downtown) and `admin.houston`
+(assigned to Bayou Picture House). Their passwords are fictional, public, and listed in the
+README's local-only demo accounts section; only BCrypt hashes are stored.
 
 ## Validity window for the live demo
 

@@ -18,6 +18,11 @@ spring:
   flyway:
     locations: classpath:db/migration
 
+server:
+  # Honors X-Forwarded-* from a same-origin reverse proxy in front of the React app and the API.
+  # The backend port must then only be reachable through that proxy.
+  forward-headers-strategy: native
+
 management:
   endpoints:
     web:
