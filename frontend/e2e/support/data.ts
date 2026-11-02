@@ -62,10 +62,13 @@ function randomSlot(): string {
 async function findScreenId(request: APIRequestContext): Promise<number> {
   for (let day = 0; day < SCREEN_LOOKUP_DAYS; day++) {
     const date = new Date(Date.now() + day * 86_400_000).toISOString().slice(0, 10);
-    const search = await json<{ items: Array<{ theaterName: string; screenName: string; screenId: number }> }>(
+    const search = await json<{ items: Array<{ theaterName: string; screenName: string; screenId: number; cityId: number }> }>(
       request,
-      `/api/showtimes?city=${DALLAS_CITY_ID}&date=${date}&size=50`,
+      `/api/showtimes?cityId=${DALLAS_CITY_ID}&date=${date}&size=50`,
     );
+    // Unknown query parameters are ignored by the API, so prove the city filter was applied.
+    expect(search.items.map((item) => item.cityId).filter((cityId) => cityId !== DALLAS_CITY_ID), `cityId filter on ${date}`)
+      .toEqual([]);
     const match = search.items.find((item) => item.theaterName === THEATER && item.screenName === SCREEN);
     if (match) return match.screenId;
   }
