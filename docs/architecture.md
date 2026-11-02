@@ -537,7 +537,7 @@ All paths are under `/api`. Errors use a JSON body `{ "code": "…", "message": 
 | `POST /holds/{id}/payments` (header `Idempotency-Key`) | owner | 201 booking; 402 `PAYMENT_DECLINED`; 202 `UNKNOWN`; 409 `HOLD_EXPIRED` (with `VOIDED` if captured) / `PAYMENT_IN_PROGRESS` / `TOO_MANY_ATTEMPTS`; 422 `IDEMPOTENCY_KEY_REUSED` |
 | `GET /payments/{id}` | owner | Current state; triggers on-demand resolution if `UNKNOWN` or stale `PENDING` |
 | `GET /bookings` | customer | Own confirmed bookings |
-| `GET /me` | authenticated | Current user and role (used by the React login flow) |
+| `GET /auth/me` | authenticated | Current user id, username, display name and role (used by the React login flow) |
 | `POST /admin/theaters/{theaterId}/showtimes` | theater admin (scoped) | 201; 403 not assigned; 409 overlapping showtime |
 
 The final API reference (`docs/api.md`) is written in Phase 7 from the implemented code.
@@ -615,5 +615,6 @@ Update this table only after a phase's verification checkpoint has actually pass
 2. Whether `TIMEOUT` should also have a "not captured" variant to exercise
    `UNKNOWN → DECLINED (NOT_FOUND)` through the UI, or only through integration tests.
 3. Response code for `SEATS_BUSY`: 409 (proposed) or 503 with `Retry-After`.
-4. How the React app reaches the API locally (same-origin reverse proxy vs. CORS). This is to
-   be settled in Phase 1.
+4. ~~How the React app reaches the API locally.~~ Settled in Phase 1: same-origin reverse proxy,
+   no CORS configuration. The backend honors `X-Forwarded-*` headers
+   (`server.forward-headers-strategy: native`).

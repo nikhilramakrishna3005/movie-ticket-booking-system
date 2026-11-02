@@ -1,0 +1,28 @@
+# Build output
+target/
+build/
+dist/
+out/
+node_modules/
+
+# Test and tool artifacts
+playwright-report/
+test-results/
+*.log
+
+# IDE and OS files
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+.DS_Store
+Thumbs.db
+
+# Environment and secrets (keep the committed placeholder template)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
