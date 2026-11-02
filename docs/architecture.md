@@ -5,8 +5,8 @@
 > system does X" describes the target design unless §13 says otherwise.
 >
 > Revision 2 applies design decisions approved by the engineering owner during review of PR #1
-> (see `docs/ai-workflow.md` §4). Those are decisions about the *design*; no code has been
-> written or verified.
+> (see `docs/ai-workflow.md` §4). Those were decisions about the *design*, made before any code
+> was written.
 
 ## 1. Approach: modular monolith
 
