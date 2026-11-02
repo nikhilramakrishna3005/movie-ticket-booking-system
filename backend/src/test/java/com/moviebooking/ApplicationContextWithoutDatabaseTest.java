@@ -37,9 +37,14 @@ import com.moviebooking.booking.BookingSeatRepository;
 import com.moviebooking.booking.OutboxEventRepository;
 import com.moviebooking.booking.SeatHoldRepository;
 import com.moviebooking.booking.ShowSeatRepository;
+import com.moviebooking.config.ResourceNotFoundException;
+import com.moviebooking.catalog.LanguageRepository;
 import com.moviebooking.catalog.MovieRepository;
+import com.moviebooking.catalog.ShowtimeSearch;
 import com.moviebooking.payment.PaymentAttemptRepository;
 import com.moviebooking.payment.SimulatedPaymentProvider;
+import com.moviebooking.theater.CityRepository;
+import com.moviebooking.theater.ShowtimeScheduler;
 import com.moviebooking.security.AppUser;
 import com.moviebooking.security.AppUserRepository;
 import com.moviebooking.security.Role;
@@ -76,6 +81,19 @@ class ApplicationContextWithoutDatabaseTest {
 
     @MockitoBean
     private ShowtimeRepository showtimes;
+
+    @MockitoBean
+    private CityRepository cities;
+
+    @MockitoBean
+    private LanguageRepository languages;
+
+    // JdbcTemplate-backed; replaced so this context needs no DataSource.
+    @MockitoBean
+    private ShowtimeSearch showtimeSearch;
+
+    @MockitoBean
+    private ShowtimeScheduler showtimeScheduler;
 
     @MockitoBean
     private SeatRepository seats;
@@ -271,6 +289,37 @@ class ApplicationContextWithoutDatabaseTest {
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
 
         verifyNoInteractions(holds, paymentAttempts, provider);
+    }
+
+    @Test
+    void anonymousVisitorsCanBrowseButCannotBook() throws Exception {
+        given(showtimeSearch.search(null, null, null, null, null, null, null))
+                .willReturn(new ShowtimeSearch.ShowtimePage(java.time.LocalDate.parse("2026-11-02"),
+                        "America/Chicago", 0, 20, 0, 0, List.of()));
+        given(showtimeSearch.get(1L)).willThrow(new ResourceNotFoundException());
+
+        mockMvc.perform(get("/api/cities")).andExpect(status().isOk()).andExpect(jsonPath("$").isArray());
+        mockMvc.perform(get("/api/movies")).andExpect(status().isOk()).andExpect(jsonPath("$").isArray());
+        mockMvc.perform(get("/api/showtimes")).andExpect(status().isOk()).andExpect(jsonPath("$.results").isArray());
+        mockMvc.perform(get("/api/showtimes/1")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/showtimes/1/seats")).andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/showtimes/1/holds").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"seatIds\":[1]}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/admin/showtimes").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(showtimeScheduler);
+    }
+
+    @Test
+    void customersCannotCreateShowtimes() throws Exception {
+        mockMvc.perform(post("/api/admin/showtimes").with(httpBasic("carol", PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        verifyNoInteractions(showtimeScheduler);
     }
 
     @Test

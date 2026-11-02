@@ -52,6 +52,8 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole(Role.THEATER_ADMIN.name())
+                        .requestMatchers(HttpMethod.GET, "/api/cities", "/api/movies", "/api/showtimes",
+                                "/api/showtimes/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/showtimes/*/holds").hasRole(Role.CUSTOMER.name())
                         .requestMatchers("/api/holds/**", "/api/payments/**", "/api/bookings/**")
                         .hasRole(Role.CUSTOMER.name())

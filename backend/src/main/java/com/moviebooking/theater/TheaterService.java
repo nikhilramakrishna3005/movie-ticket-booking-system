@@ -7,17 +7,25 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.moviebooking.config.ResourceNotFoundException;
 
-/** Read access to showtimes and physical seats for other packages. */
+/** Read access to cities, showtimes and physical seats for other packages. */
 @Service
 @Transactional(readOnly = true)
 public class TheaterService {
 
     private final ShowtimeRepository showtimes;
     private final SeatRepository seats;
+    private final CityRepository cities;
 
-    public TheaterService(ShowtimeRepository showtimes, SeatRepository seats) {
+    public TheaterService(ShowtimeRepository showtimes, SeatRepository seats, CityRepository cities) {
         this.showtimes = showtimes;
         this.seats = seats;
+        this.cities = cities;
+    }
+
+    public List<CityResponse> listCities() {
+        return cities.findAllByOrderByNameAscStateCodeAsc().stream()
+                .map(city -> new CityResponse(city.getId(), city.getName(), city.getStateCode()))
+                .toList();
     }
 
     public Showtime getShowtime(long showtimeId) {
@@ -35,5 +43,8 @@ public class TheaterService {
     /** Seats of a screen in display order (row, then seat number). */
     public List<Seat> getSeats(long screenId) {
         return seats.findByScreenIdOrderByRowLabelAscSeatNumberAsc(screenId);
+    }
+
+    public record CityResponse(long id, String name, String stateCode) {
     }
 }
