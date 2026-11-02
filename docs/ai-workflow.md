@@ -76,7 +76,7 @@ the human owner to classify; none have been entered here._
 
 | Date | Phase / PR | Mistake | How it was caught | Correction |
 |---|---|---|---|---|
-| | | | | |
+| 2026-11-02 | Phase 1 / PR #2 (schema) | The AI-written `payment_attempt_failure_reason_ck` accepted a `DECLINED` attempt with a `NULL` reason: `NULL IN (…)` makes the CHECK evaluate to `NULL`, which PostgreSQL treats as passing. | Before commit, the AI agent ran the `DatabaseSchemaIT` assertions against a throwaway local PostgreSQL 16 (Docker was unavailable). The test `aDeclineMustRecordAReason` failed. | Added an explicit `failure_reason IS NOT NULL` to the CHECK in the not-yet-published V5 migration; the test then passed. Not yet reviewed by a human. |
 
 ## 6. Reflections
 
