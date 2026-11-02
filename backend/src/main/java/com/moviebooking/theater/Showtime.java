@@ -20,6 +20,9 @@ public class Showtime {
     @Column(name = "screen_id", nullable = false)
     private long screenId;
 
+    @Column(name = "movie_id", nullable = false)
+    private long movieId;
+
     @Column(name = "starts_at", nullable = false)
     private Instant startsAt;
 
@@ -36,6 +39,10 @@ public class Showtime {
 
     public long getScreenId() {
         return screenId;
+    }
+
+    public long getMovieId() {
+        return movieId;
     }
 
     public Instant getStartsAt() {

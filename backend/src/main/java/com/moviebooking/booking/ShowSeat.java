@@ -40,6 +40,9 @@ public class ShowSeat {
     @Column(name = "hold_expires_at")
     private Instant holdExpiresAt;
 
+    @Column(name = "booking_id")
+    private UUID bookingId;
+
     @Column(nullable = false)
     private BigDecimal price;
 
@@ -74,6 +77,14 @@ public class ShowSeat {
         status = ShowSeatStatus.HELD;
         holdId = newHoldId;
         holdExpiresAt = expiresAt;
+    }
+
+    /** Permanent: no code path moves a BOOKED seat to any other status. */
+    void book(UUID newBookingId) {
+        status = ShowSeatStatus.BOOKED;
+        bookingId = newBookingId;
+        holdId = null;
+        holdExpiresAt = null;
     }
 
     void release() {

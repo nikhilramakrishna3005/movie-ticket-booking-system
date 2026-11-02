@@ -22,6 +22,10 @@ booking:
   hold-ttl: 8m
   # Upper bound on any row-lock wait in hold transactions; exceeding it returns 409 SEATS_BUSY.
   lock-timeout: 2s
+  # A payment is refused when the hold has less time left than this (docs/architecture.md §6.5).
+  payment-min-remaining: 60s
+  # A PENDING attempt older than this can no longer have a charge in flight and may be resolved.
+  payment-timeout: 5s
 
 server:
   # Honors X-Forwarded-* from a same-origin reverse proxy in front of the React app and the API.

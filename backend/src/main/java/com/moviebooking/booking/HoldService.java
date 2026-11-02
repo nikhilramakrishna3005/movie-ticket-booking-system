@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.moviebooking.config.ApiException;
 import com.moviebooking.config.ResourceNotFoundException;
+import com.moviebooking.payment.PaymentAttemptService;
 import com.moviebooking.security.AccessPolicy;
 import com.moviebooking.security.AuthenticatedUser;
 import com.moviebooking.theater.Showtime;
@@ -42,16 +43,18 @@ public class HoldService {
     private final SeatHoldRepository holds;
     private final ShowSeatRepository showSeats;
     private final TheaterService theaterService;
+    private final PaymentAttemptService payments;
     private final Clock clock;
     private final Duration holdTtl;
     private final String lockTimeout;
 
     public HoldService(SeatHoldRepository holds, ShowSeatRepository showSeats, TheaterService theaterService,
-            Clock clock, @Value("${booking.hold-ttl}") Duration holdTtl,
+            PaymentAttemptService payments, Clock clock, @Value("${booking.hold-ttl}") Duration holdTtl,
             @Value("${booking.lock-timeout}") Duration lockTimeout) {
         this.holds = holds;
         this.showSeats = showSeats;
         this.theaterService = theaterService;
+        this.payments = payments;
         this.clock = clock;
         this.holdTtl = holdTtl;
         this.lockTimeout = lockTimeout.toMillis() + "ms";
@@ -150,6 +153,12 @@ public class HoldService {
             case CONVERTED -> throw ApiException.conflict("HOLD_CONVERTED",
                     "The hold was already converted into a booking", Map.of("holdId", holdId));
             case ACTIVE -> {
+                // Checked under the hold lock, which every payment transaction also takes first.
+                payments.findInFlight(holdId).ifPresent(inFlight -> {
+                    throw ApiException.conflict("PAYMENT_IN_PROGRESS",
+                            "The hold cannot be released while its payment is in progress or unresolved",
+                            Map.of("paymentId", inFlight.id()));
+                });
                 // Seats whose expired claim was taken over by another hold no longer point here,
                 // so only rows still owned by this hold are reset.
                 showSeats.lockHeldBy(hold.getShowtimeId(), holdId).forEach(ShowSeat::release);
