@@ -118,6 +118,8 @@ Each phase is one or a few small PRs on feature branches, reviewed and merged by
 ### Phase 6: Playwright E2E + clean-start verification (0.75 h)
 - **Scope:** Two Playwright tests against the Compose stack (AC-E1 happy path, AC-E2 decline).
   A script or documented command sequence for a clean start followed by the E2E run.
+  (Delivered as Task 08, with an extra seat-conflict test. Each test creates its own showtime
+  through the admin API instead of relying on seed inventory, so runs need no reset between them.)
 - **Checkpoint:** From `docker compose down -v`, the stack starts and `npx playwright test`
   passes. Run it **twice** from a clean start to check for flakiness, and record the results.
 
