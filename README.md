@@ -21,5 +21,15 @@ sends credentials with every request, so a real deployment would require HTTPS. 
 curl -u alice:alice-demo-pass http://localhost:8080/api/auth/me
 ```
 
-`/actuator/health` is public. Everything under `/api/**` requires authentication, and
-`/api/admin/**` additionally requires the theater-admin role.
+`/actuator/health` and the browsing endpoints are public: `GET /api/cities`, `GET /api/movies`,
+`GET /api/showtimes`, `GET /api/showtimes/{id}` and `GET /api/showtimes/{id}/seats`. Holds,
+payments and bookings require a customer login. `/api/admin/**` requires the theater-admin role,
+and an admin may only schedule showtimes for theaters assigned to them. Everything else under
+`/api/**` requires authentication.
+
+```bash
+curl 'http://localhost:8080/api/showtimes?cityId=1&date=2026-11-03&q=Intersteller'
+```
+
+Search dates and the `localDate`/`localStartTime` fields are in the theater's city time zone
+(all sample cities: `America/Chicago`); `startsAt`/`endsAt` are UTC instants.

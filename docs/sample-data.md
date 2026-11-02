@@ -1,8 +1,8 @@
 # Sample Data
 
-> **Status:** written in `V7__sample_data.sql`. Whether it loads has **not** been verified with
-> Testcontainers, because Docker was unavailable in the authoring environment. See PR #2 for
-> what was actually run.
+> **Status:** written in `V7__sample_data.sql`; `city.time_zone` added by `V9__city_time_zone.sql`.
+> Earlier phases verified it on local PostgreSQL only (see PR #2). In Task 06 it loaded on
+> Testcontainers PostgreSQL 16.15 and `DatabaseSchemaIT` passed.
 
 The demo data is compact and **deterministic**: every run of the migrations produces the same
 rows. It does not depend on the date the migrations run, and it contains no `NOW()` calls.
@@ -31,9 +31,9 @@ README's local-only demo accounts section; only BCrypt hashes are stored.
 - Sample showtimes run **from 2026-11-03 through 2027-01-31 inclusive**, at **13:00 and 16:30
   America/Chicago** (UTC−6 for the whole window). The assessment date is 2026-11-02, so every
   sample showtime is in the future at assessment time.
-- Show times were chosen so that the **UTC date equals the local date**. The MVP search filters
-  by UTC date (`docs/product-scope.md` §7), so searching for a calendar date returns that day's
-  local shows.
+- Show times were chosen so that the **UTC date equals the local date**. Since Task 06 the
+  search filters by the theater's local date (`city.time_zone`, added by V9), so this no longer
+  matters for correctness; it only keeps the seed easy to read.
 - Shows that have already started cannot be held (AC-H9). On any demo day within the window,
   the 13:00 and 16:30 shows of that day and all later days are usable until they start.
 - **If the demo happens after 2027-01-31**, or close to the end of the window: add a **new**
@@ -46,8 +46,8 @@ README's local-only demo accounts section; only BCrypt hashes are stored.
 
 ## Known simplifications
 
-- All sample cities are in one time zone. There is no per-theater time zone column; the
-  UTC-date search simplification would show late-evening local shows under the next UTC date.
+- All sample cities are in one time zone (`America/Chicago`). The zone is stored per city
+  (V9), so cities in other zones would work, but no such city is seeded or tested.
 - Seed data is part of the normal migration set, so it is also loaded into any database the
   application is pointed at. This is acceptable for a local-only assessment; a real deployment
   would separate reference data from demo data.

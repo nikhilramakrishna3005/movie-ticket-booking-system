@@ -99,7 +99,9 @@ Each phase is one or a few small PRs on feature branches, reviewed and merged by
 
 ### Phase 4: Read APIs, search, admin API (0.75 h)
 - **Scope:** Cities, showtime search (`pg_trgm` plus filters, paginated), showtime detail;
-  `POST /api/admin/theaters/{id}/showtimes` with theater scoping and overlap check.
+  `POST /api/admin/showtimes` with theater scoping and overlap check. (Delivered as Task 06; the
+  endpoint path changed from the proposed `/api/admin/theaters/{id}/showtimes` per the task
+  brief. Movies listing and per-city time zones were added in the same task.)
 - **Checkpoint:** Integration tests for AC-S1 through AC-S5 and AC-U1 through AC-U4 pass.
 
 ### Phase 5: Minimal React customer flow (1.25 h)
