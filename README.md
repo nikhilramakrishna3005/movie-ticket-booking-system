@@ -97,6 +97,31 @@ npm run build       # type-check and production build
 BACKEND_URL=http://localhost:3000 npm run dev   # Vite on :5173, API proxied to the Compose stack
 ```
 
+## End-to-end tests (Playwright)
+
+Playwright drives Chromium against the real Compose stack at `http://localhost:3000`
+(override with `E2E_BASE_URL`). With the stack running (`docker compose up --build -d --wait`):
+
+```bash
+cd frontend && npm ci && npx playwright install --with-deps chromium && npm run test:e2e
+```
+
+After the first setup, `npm run test:e2e` alone runs the suite. Reports go to
+`frontend/playwright-report/`, and traces of failed tests to `frontend/test-results/`.
+
+| Test (`frontend/e2e/`) | Covers |
+|---|---|
+| `booking.spec.ts`: a customer books seats and the booked seats become unavailable | Anonymous discovery → seats → sign-in → hold → `SUCCESS` → ticket (reference, seats, movie, theater, date, time, total) → seats shown as booked |
+| `booking.spec.ts`: a declined payment books nothing and a retry with a new attempt books exactly once | `DECLINE` → no ticket, seats still held → retry with a new idempotency key → one booking for exactly the chosen seats |
+| `seat-conflict.spec.ts`: a seat taken by another customer is removed from the selection… | Bob holds a seat Alice selected; Alice's hold is refused, the seat is deselected, and she books the rest |
+
+Test data: each test schedules its own showtime of a seeded movie through
+`POST /api/admin/showtimes` (as the `admin.dallas` demo user, on Starlight Cinemas Downtown,
+on a random date after the seeded window). Every test therefore starts with untouched seats, so
+tests are independent, run in parallel, and need no database reset. Showtimes created by tests
+stay in the local database; `docker compose down -v` removes them. Retries are disabled so
+flaky failures are not hidden.
+
 ## Backend tests
 
 ```bash
@@ -106,7 +131,11 @@ cd backend
 
 ## Known limitations
 
-- Playwright end-to-end tests are not implemented yet.
+- The Playwright suite finds Starlight's large screen through the seeded showtimes of the next
+  14 days, so it needs the seed window (until 2027-01-31) to still be in the future.
+- On the discover page, the search box updates the URL after a 300 ms debounce; clicking a
+  showtime within that window can be overridden by the late update and leave you on the
+  discover page. The E2E tests wait for the search to apply first. Not fixed.
 - No "my bookings" list (the API has no `GET /bookings`); a ticket is reachable from the
   confirmation page right after booking, or by its URL while signed in.
 - The local stack is plain HTTP and binds to `127.0.0.1` only.
