@@ -17,21 +17,22 @@ import com.moviebooking.security.Role;
  * Reads and resets hold state with plain SQL, so assertions check what PostgreSQL actually
  * stored rather than what the service returned.
  */
-final class HoldFixtures {
+public final class HoldFixtures {
 
     private static final String TEST_USER_PREFIX = "it-customer-";
 
     private final JdbcTemplate jdbc;
 
-    HoldFixtures(JdbcTemplate jdbc) {
+    public HoldFixtures(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
     /**
      * Restores the seeded state: no holds, payments or bookings, all seats AVAILABLE, no
-     * cancelled showtimes, no test users. Deletes follow the foreign keys.
+     * cancelled showtimes, no test users, and no showtimes created by tests. Deletes follow the
+     * foreign keys. Seeded showtimes are stamped 2026-11-02 00:00:00Z; anything later is a test row.
      */
-    void reset() {
+    public void reset() {
         jdbc.update("DELETE FROM outbox_event");
         jdbc.update("UPDATE show_seat SET status = 'AVAILABLE', hold_id = NULL, hold_expires_at = NULL,"
                 + " booking_id = NULL WHERE status <> 'AVAILABLE'");
@@ -41,6 +42,9 @@ final class HoldFixtures {
         jdbc.update("DELETE FROM simulated_provider_charge");
         jdbc.update("DELETE FROM seat_hold");
         jdbc.update("UPDATE showtime SET status = 'SCHEDULED' WHERE status = 'CANCELLED'");
+        jdbc.update("DELETE FROM show_seat WHERE showtime_id IN"
+                + " (SELECT id FROM showtime WHERE created_at > TIMESTAMPTZ '2026-11-02 00:00:00+00')");
+        jdbc.update("DELETE FROM showtime WHERE created_at > TIMESTAMPTZ '2026-11-02 00:00:00+00'");
         jdbc.update("DELETE FROM app_user WHERE username LIKE ?", TEST_USER_PREFIX + "%");
     }
 
