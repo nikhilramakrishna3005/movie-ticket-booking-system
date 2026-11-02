@@ -5,7 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-/** Read-only mapping of the movie columns used so far. */
+/** Read-only mapping of the movie columns other packages need; listings use {@link CatalogQueryRepository}. */
 @Entity
 @Table(name = "movie")
 public class Movie {
@@ -16,6 +16,9 @@ public class Movie {
     @Column(nullable = false)
     private String title;
 
+    @Column(name = "duration_minutes", nullable = false)
+    private int durationMinutes;
+
     protected Movie() {
     }
 
@@ -25,5 +28,9 @@ public class Movie {
 
     public String getTitle() {
         return title;
+    }
+
+    public int getDurationMinutes() {
+        return durationMinutes;
     }
 }

@@ -38,6 +38,7 @@ import com.moviebooking.booking.OutboxEventRepository;
 import com.moviebooking.booking.SeatHoldRepository;
 import com.moviebooking.booking.ShowSeatRepository;
 import com.moviebooking.catalog.CatalogQueryRepository;
+import com.moviebooking.catalog.LanguageRepository;
 import com.moviebooking.catalog.MovieRepository;
 import com.moviebooking.payment.PaymentAttemptRepository;
 import com.moviebooking.payment.SimulatedPaymentProvider;
@@ -45,6 +46,7 @@ import com.moviebooking.security.AppUser;
 import com.moviebooking.security.AppUserRepository;
 import com.moviebooking.security.Role;
 import com.moviebooking.theater.CityRepository;
+import com.moviebooking.theater.ScreenRepository;
 import com.moviebooking.theater.SeatRepository;
 import com.moviebooking.theater.ShowtimeRepository;
 
@@ -59,7 +61,8 @@ import com.moviebooking.theater.ShowtimeRepository;
         + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration")
 @AutoConfigureMockMvc
 @MockitoBean(types = { BookingRepository.class, BookingSeatRepository.class, OutboxEventRepository.class,
-        MovieRepository.class, CatalogQueryRepository.class, CityRepository.class })
+        MovieRepository.class, LanguageRepository.class, CatalogQueryRepository.class, CityRepository.class,
+        ScreenRepository.class })
 class ApplicationContextWithoutDatabaseTest {
 
     private static final String PASSWORD = "test-only-password";
@@ -291,8 +294,18 @@ class ApplicationContextWithoutDatabaseTest {
         mockMvc.perform(get("/api/holds/{id}", UUID.randomUUID())).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/payments/{id}", UUID.randomUUID())).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/bookings/{id}", UUID.randomUUID())).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/admin/showtimes").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(holds, paymentAttempts, provider);
+    }
+
+    @Test
+    void customersCannotCreateShowtimes() throws Exception {
+        mockMvc.perform(post("/api/admin/showtimes").with(httpBasic("carol", PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 
     @Test

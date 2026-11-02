@@ -3,6 +3,7 @@ package com.moviebooking.catalog;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,17 +16,28 @@ import com.moviebooking.config.ResourceNotFoundException;
 public class CatalogService {
 
     private final MovieRepository movies;
+    private final LanguageRepository languages;
     private final CatalogQueryRepository queries;
     private final Clock clock;
 
-    public CatalogService(MovieRepository movies, CatalogQueryRepository queries, Clock clock) {
+    public CatalogService(MovieRepository movies, LanguageRepository languages, CatalogQueryRepository queries,
+            Clock clock) {
         this.movies = movies;
+        this.languages = languages;
         this.queries = queries;
         this.clock = clock;
     }
 
     public Movie getMovie(long movieId) {
         return movies.findById(movieId).orElseThrow(ResourceNotFoundException::new);
+    }
+
+    public Optional<Movie> findMovie(long movieId) {
+        return movies.findById(movieId);
+    }
+
+    public boolean languageExists(String code) {
+        return languages.existsById(code);
     }
 
     public List<MovieView> listMovies() {
