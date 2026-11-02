@@ -77,6 +77,8 @@ the human owner to classify; none have been entered here._
 | Date | Phase / PR | Mistake | How it was caught | Correction |
 |---|---|---|---|---|
 | 2026-11-02 | Phase 1 / PR #2 (schema) | The AI-written `payment_attempt_failure_reason_ck` accepted a `DECLINED` attempt with a `NULL` reason: `NULL IN (…)` makes the CHECK evaluate to `NULL`, which PostgreSQL treats as passing. | Before commit, the AI agent ran the `DatabaseSchemaIT` assertions against a throwaway local PostgreSQL 16 (Docker was unavailable). The test `aDeclineMustRecordAReason` failed. | Added an explicit `failure_reason IS NOT NULL` to the CHECK in the not-yet-published V5 migration; the test then passed. Not yet reviewed by a human. |
+| 2026-11-02 | Phase 2 (seat holds) | The AI agent first wrote the seat and hold locks as JPA `@Lock(PESSIMISTIC_WRITE)`, assuming Hibernate emits `FOR UPDATE`. On PostgreSQL it emits `FOR NO KEY UPDATE`. | The AI agent ran the app against local PostgreSQL with SQL logging and read the generated statements. | Rewrote the locking reads as native `SELECT … FOR UPDATE` so the lock clause matches the design and is visible in code. Not yet reviewed by a human. |
+| 2026-11-02 | Phase 2 (seat holds) | A code comment claimed that without an explicit flush, the replacement hold's INSERT would hit the one-active-hold index before the old hold's UPDATE. Removing the flush did not fail any test: the next native query already auto-flushes. | Mutation check by the AI agent: removed the flush and re-ran `HoldApiIT` on local PostgreSQL; all tests still passed. | Kept the explicit flush (so correctness does not rely on implicit auto-flush) and corrected the comment. No test currently distinguishes the two; noted in the PR. |
 
 ## 6. Reflections
 
