@@ -1,8 +1,9 @@
 # Product Scope
 
-> **Status: PROPOSED TARGETS, PARTLY IMPLEMENTED.** Every feature, workflow, and acceptance
-> criterion below is a target for the 10-hour assessment build. What is actually implemented
-> and verified is tracked only in `docs/architecture.md` §13.
+> **Status: TARGETS WRITTEN BEFORE IMPLEMENTATION; DELIVERY STATUS IN §8.** Sections 1–7 are the
+> scope as planned for the 10-hour assessment build and are kept as written. What was actually
+> delivered is summarized in §8 and mapped criterion by criterion, with tests, in
+> `docs/requirements-checklist.md`.
 >
 > Revision 2 applies design decisions approved by the engineering owner during review of PR #1.
 
@@ -204,3 +205,24 @@ Each criterion should map to at least one automated test once implemented (see
 - **Decided in Task 06:** instants are stored and compared in UTC, but the search "date", the
   local times shown for a showtime, and an admin's entered start time are in the theater's city
   time zone (`city.time_zone`; all sample cities use `America/Chicago`).
+
+## 8. Delivery status (final audit, 2026-11-02)
+
+**Delivered and covered by automated tests:**
+- Workflows 3.1–3.5 and 3.7.
+- Every acceptance criterion in §5 except part of AC-H10: there is no "view a hold" endpoint.
+- Failure cases F1–F7 and F9–F14.
+- F8 (a crash between charge and confirmation) is handled by on-demand resolution of a stale
+  `PENDING` attempt, and is tested by simulating that state rather than killing the process.
+- F10 behaves as documented: nobody polls, so the attempt stays unresolved.
+
+**Deferred (not implemented):**
+
+| Feature | Why / where recorded |
+|---|---|
+| "My bookings" list (§3.6, `GET /bookings`) | Cut list item 4; the confirmation page satisfies the core flow |
+| `GET /holds/{id}` | Not needed by the React flow, which keeps checkout state in memory |
+| Admin UI and showtime cancellation | Cut list items 1 and 3; showtimes are created through the API |
+| Background workers: hold-cleanup sweeper, outbox relay, scheduled payment reconciliation | Cut list item 2; correctness relies on lazy expiry and on-demand resolution instead |
+| Redis, Kafka, Solr | ADRs 0001–0003 |
+| Load testing to the 500,000-visitor target | Non-goal; design notes only (`docs/architecture.md` §12) |

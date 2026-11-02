@@ -3,6 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-11-02 (revised 2026-11-02 after review of PR #1)
 - **Deciders:** _Pending human review_
+- **Implementation note (final audit, 2026-11-02):** as decided, Kafka is not used. It is absent from `backend/pom.xml`, `frontend/package.json` and `docker-compose.yml`. The booking transaction writes a `BookingConfirmed` row to `outbox_event` (asserted by `PaymentApiIT`). No relay or broker delivers it; `published_at` stays `NULL`. The status stays "Proposed" because no formal acceptance by the human owner is recorded; the ADR was merged with the planning documents in PR #1.
 
 ## Context / Problem
 
