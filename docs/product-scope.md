@@ -36,7 +36,7 @@ for how the design accounts for this and what is out of reach for this assessmen
 ## 3. MVP workflows (proposed)
 
 ### 3.1 Customer: search showtimes
-1. Customer selects a city and date (defaults to today, UTC-based in the MVP).
+1. Customer selects a city and date (defaults to today in America/Chicago, the zone of every seeded theater).
 2. Customer optionally filters by language and genre, and/or types a movie or theater name.
 3. Search tolerates typos (e.g. "Intersteller" finds "Interstellar"; "Regall" finds "Regal").
 4. Results list showtimes, ordered by relevance and then start time, paginated.
@@ -200,7 +200,7 @@ Each criterion should map to at least one automated test once implemented (see
   users; login required to hold; one active hold per customer per showtime; UTC `Clock` for all
   expiry logic.
 - **Assumed (proposed defaults):** hold TTL 8 minutes; at most 10 seats per hold; at most 3
-  payment attempts per hold; prices fixed per seat category per showtime; single currency;
-  dates and times handled in UTC in the MVP (no theater-local time zones).
-- **Open:** whether theater-local time zones should affect the search "date" filter. The
-  proposed MVP uses UTC dates; this is a known simplification.
+  payment attempts per hold; prices fixed per seat category per showtime; single currency.
+- **Decided for discovery:** search dates and showtime wall-clock times use America/Chicago.
+  The schema has no timezone column; every seeded city is in Texas. Expiry logic stays on the
+  UTC `Clock`. A theater outside this zone is not supported until a timezone column is added.

@@ -490,6 +490,8 @@ existing booking. The `UNIQUE (hold_id)` constraint is the backstop.
   not use `NOW()`, `CURRENT_TIMESTAMP`, or column defaults based on them. Audit timestamps
   (`created_at`, `updated_at`) are also set from the `Clock` for consistency.
 - Columns are `timestamptz`, mapped to `Instant`. The JDBC/Hibernate time zone is set to UTC.
+- **Showtime dates are not UTC dates.** Search and admin scheduling interpret a calendar day and
+  a wall-clock start in `America/Chicago` (see §11). Expiry checks still use the UTC `Clock`.
 - **Tests** replace the bean with a mutable test clock (fixed instant, advanced explicitly).
   Expiry tests advance the clock instead of sleeping. The "late capture" test advances the
   clock past hold expiry between `charge` and TX3.
@@ -546,9 +548,10 @@ All paths are under `/api`. Errors use a JSON body `{ "code": "…", "message": 
 
 | Method & path | Auth | Purpose / notable responses |
 |---|---|---|
-| `GET /cities` | any | List cities |
-| `GET /showtimes/search?city=&date=&q=&language=&genre=&page=&size=` | any | Typo-tolerant search; `size` capped |
-| `GET /showtimes/{id}` | any | Showtime detail |
+| `GET /cities` | any | Cities, ordered by name |
+| `GET /movies` | any | Seeded movies: language, genres, certification, runtime, release date |
+| `GET /showtimes?city=&date=&q=&language=&genre=&page=&size=` | any | Scheduled showtimes for one America/Chicago date (default: today in that zone). `q` is a typo-tolerant movie or theater name. `size` is capped at 50 |
+| `GET /showtimes/{id}` | any | Movie, theater, screen, language, local start, and seat prices with live availability |
 | `GET /showtimes/{id}/seats` | any | Seat map with effective status (§5.4) |
 | `POST /showtimes/{id}/holds` | customer | 201 hold; 400 `INVALID_REQUEST` / `INVALID_SEATS`; 409 `SEATS_UNAVAILABLE` / `SEATS_BUSY` / `ACTIVE_HOLD_EXISTS` / `SHOWTIME_CLOSED` |
 | `GET /holds/{id}` | owner | Hold detail and expiry |
@@ -558,16 +561,24 @@ All paths are under `/api`. Errors use a JSON body `{ "code": "…", "message": 
 | `GET /bookings/{id}` | owner | Confirmation: reference, movie, theater, screen, city, start time, seats, total |
 | `GET /bookings` | customer | Own confirmed bookings |
 | `GET /auth/me` | authenticated | Current user id, username, display name and role (used by the React login flow) |
-| `POST /admin/theaters/{theaterId}/showtimes` | theater admin (scoped) | 201; 403 not assigned; 409 overlapping showtime |
+| `POST /admin/showtimes` | theater admin (scoped) | 201, seeds `show_seat`. Body: screen, movie, language, Chicago wall-clock `startsAt`, standard and premium prices. 400 invalid; 403 not assigned to the screen's theater; 404 unknown screen or movie; 409 `SHOWTIME_OVERLAP` |
 
 The final API reference (`docs/api.md`) is written in Phase 7 from the implemented code.
 
-## 11. Search (proposed)
+## 11. Search
 
-- PostgreSQL `pg_trgm` with GIN trigram indexes on movie title and theater name for typo
-  tolerance (similarity threshold plus ranking), combined with indexed filters on city,
-  language, genre, and showtime date. Results are paginated with a capped page size.
-- Implemented as one query in `catalog`. Solr is deferred (ADR 0003).
+- PostgreSQL `pg_trgm` `word_similarity` (threshold 0.5) on movie title and theater name, so a
+  typo is scored against the best matching part of the name. Results are ordered by that score,
+  then start time. The GIN trigram indexes from V6 support the `%` / `ILIKE` operators; this
+  query calls the function directly, which is fine for the seeded catalog and does not claim to
+  use the index.
+- A one-character typo in a short name (about four letters) does not produce enough shared
+  trigrams to clear 0.5. The seeded examples ("Intersteller", "Starlght", "Bayuo") do.
+- Filters combine: city id, language code, genre name, and one calendar date. The date is a day
+  in `America/Chicago` (`config.TheaterZone`), converted to a UTC instant range. Every seeded
+  theater is in Texas and the schema has no timezone column, so there is one zone. A theater in
+  another zone would need a new column.
+- Page size defaults to 20 and is capped at 50. Solr is deferred (ADR 0003).
 
 ## 12. Scale considerations (design notes, not claims)
 
@@ -602,15 +613,15 @@ and Kafka would be added only when measurements justify them (ADRs 0001–0003).
 |---|---|
 | Project scaffolding, Docker Compose | Implemented (Phase 1, PR #2). Compose stack not yet started end to end. |
 | Flyway schema and seed data | Implemented (V1–V8). Verified on local PostgreSQL 16 only; Testcontainers not run (no Docker). |
-| Security (HTTP Basic, seeded users, scoping) | Implemented (PR #2). Verified with MockMvc and on local PostgreSQL 16 only. Currently every `/api/**` endpoint, including the seat map, requires login (see §8.1 conflict noted in PR #2). |
-| Catalog & search | Not implemented |
-| Theater & showtimes | Read-only `Showtime`/`Seat` mapping and venue names used by holds and booking confirmations; no admin or search endpoints |
+| Security (HTTP Basic, seeded users, scoping) | Implemented (PR #2). `GET /api/cities`, `/api/movies`, `/api/showtimes` and `/api/showtimes/**` (including the seat map) are anonymous. Holds, payments and bookings stay customer-only. Verified with MockMvc and on local PostgreSQL 16 only. |
+| Catalog & search | Implemented: `GET /api/movies`, `GET /api/showtimes` with Chicago-local dates, trigram name search and pagination, `GET /api/showtimes/{id}`. Verified on local PostgreSQL 16 only; Testcontainers not run. |
+| Theater & showtimes | Read models plus `POST /api/admin/showtimes` (assigned-theater check, exclusion-constraint overlap, seat inventory). Verified on local PostgreSQL 16 only; Testcontainers not run. **Not yet implemented:** showtime cancellation. |
 | Seat holds & locking | Implemented (Phase 2): create hold, release hold, seat map (§5.3, §5.4, §5.6). Locks use native `SELECT … FOR UPDATE`. Verified on local PostgreSQL 16 only; Testcontainers not run. The §5.6 `PAYMENT_IN_PROGRESS` release check was added in Phase 3. **Not yet implemented:** `GET /holds/{id}`. |
 | Simulated payment & attempt states | Implemented (Phase 3): provider with ledger and transaction guard, attempt states, idempotency, on-demand resolution (§6). Verified on local PostgreSQL 16 only; Testcontainers not run. No background reconciliation (by design). |
 | Booking confirmation & outbox write | Implemented (Phase 3): TX3 (§6.8), `GET /bookings/{id}`. The outbox is written, not relayed. **Not yet implemented:** `GET /bookings` (list). |
-| Admin endpoint (create showtime) | Not implemented |
+| Admin endpoint (create showtime) | Implemented: `POST /api/admin/showtimes` (see Theater & showtimes). No admin UI. |
 | React UI | Not implemented |
-| Integration / concurrency tests | Security, schema, hold, payment API, and hold/payment concurrency ITs written; run on local PostgreSQL 16 only (Testcontainers blocked: no Docker) |
+| Integration / concurrency tests | Security, schema, discovery, admin showtime, hold, payment API, and hold/payment concurrency ITs written; run on local PostgreSQL 16 only (Testcontainers blocked: no Docker) |
 | Playwright E2E tests | Not implemented |
 
 Update this table only after a phase's verification checkpoint has actually passed.
