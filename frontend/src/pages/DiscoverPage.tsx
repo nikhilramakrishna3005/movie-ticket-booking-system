@@ -28,7 +28,9 @@ export function DiscoverPage() {
   const [searchText, setSearchText] = useState(q);
 
   // Follows back/forward navigation without trimming what the user is still typing.
-  useEffect(() => setSearchText((current) => (current.trim() === q ? current : q)), [q]);
+  useEffect(() => {
+    setSearchText((current) => (current.trim() === q ? current : q));
+  }, [q]);
   useEffect(() => {
     if (searchText.trim() === q) return;
     const timer = setTimeout(() => update({ q: searchText.trim() }), SEARCH_DEBOUNCE_MS);
@@ -94,7 +96,7 @@ export function DiscoverPage() {
         </div>
       </section>
 
-      <section aria-label="Find showtimes" className="surface sticky top-16 z-20 space-y-4 p-4 sm:p-5">
+      <section aria-label="Find showtimes" className="surface z-20 space-y-4 p-4 sm:p-5 lg:sticky lg:top-16">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           {cities.data ? (
             <CitySelect cities={cities.data} value={city?.id} onChange={setCity} />
@@ -141,7 +143,7 @@ export function DiscoverPage() {
         <div className="mb-4 flex items-baseline justify-between gap-4">
           <h2 className="font-display text-2xl font-semibold text-mist-50">{longDate(date)}</h2>
           {showtimes.status === 'success' && (
-            <p className="text-sm text-mist-500">
+            <p className="hidden text-sm text-mist-500 sm:block">
               {groups.length} {groups.length === 1 ? 'movie' : 'movies'} · {showtimes.data.length} showtimes
             </p>
           )}

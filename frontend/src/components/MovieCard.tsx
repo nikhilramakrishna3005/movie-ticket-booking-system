@@ -43,11 +43,11 @@ export function MovieCard({ group, index, search }: { group: MovieShowtimes; ind
     >
       <Link
         to={`/movies/${group.movieId}${search}`}
-        className="relative block aspect-[16/10] shrink-0 sm:aspect-auto sm:w-40"
+        className="relative block aspect-[16/7] shrink-0 overflow-hidden sm:aspect-auto sm:w-40"
         tabIndex={-1}
         aria-hidden
       >
-        <Poster title={title} showTitle={false} className="absolute inset-0 transition-transform duration-500 group-hover/card:scale-[1.03]" />
+        <Poster title={title} showTitle={false} fill className="transition-transform duration-500 group-hover/card:scale-[1.03]" />
       </Link>
       <div className="flex min-w-0 flex-1 flex-col p-5">
         <div className="flex items-start justify-between gap-3">
@@ -73,7 +73,7 @@ export function MovieCard({ group, index, search }: { group: MovieShowtimes; ind
             </p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {showtimes.slice(0, CHIPS_ON_CARD).map((showtime) => (
             <ShowtimeChip key={showtime.showtimeId} showtime={showtime} />
           ))}
@@ -93,7 +93,7 @@ export function MovieCard({ group, index, search }: { group: MovieShowtimes; ind
 export function MovieCardSkeleton() {
   return (
     <div className="surface flex flex-col overflow-hidden sm:flex-row" aria-hidden>
-      <div className="skeleton aspect-[16/10] rounded-none sm:aspect-auto sm:h-52 sm:w-40" />
+      <div className="skeleton aspect-[16/7] rounded-none sm:aspect-auto sm:h-52 sm:w-40" />
       <div className="flex-1 space-y-3 p-5">
         <div className="skeleton h-6 w-2/3" />
         <div className="skeleton h-4 w-1/2" />

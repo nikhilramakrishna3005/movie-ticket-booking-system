@@ -53,7 +53,7 @@ export function MoviePage() {
   return (
     <div className="pb-20">
       <section className="relative overflow-hidden border-b border-white/5">
-        {movie && <Poster title={movie.title} showTitle={false} className="absolute inset-0 scale-110 opacity-40 blur-2xl" />}
+        {movie && <Poster title={movie.title} showTitle={false} fill className="scale-110 opacity-40 blur-2xl" />}
         <div className="absolute inset-0 bg-gradient-to-b from-ink-950/40 via-ink-950/70 to-ink-950" aria-hidden />
         <div className="relative mx-auto flex max-w-7xl flex-col gap-8 px-4 py-10 sm:px-6 md:flex-row md:items-end md:py-14">
           {movie ? (

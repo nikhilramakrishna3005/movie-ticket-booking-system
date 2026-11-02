@@ -66,14 +66,16 @@ interface PosterProps {
   className?: string;
   /** Show the title on the art (off when the title is already printed next to the poster). */
   showTitle?: boolean;
+  /** Cover the nearest positioned ancestor instead of sizing itself (e.g. with an aspect ratio). */
+  fill?: boolean;
 }
 
 /** Generated, license-free poster art (see src/lib/posters.ts). Decorative: the title is in the text. */
-export function Poster({ title, className = '', showTitle = true }: PosterProps) {
+export function Poster({ title, className = '', showTitle = true, fill = false }: PosterProps) {
   const spec = posterFor(title);
   const id = useId();
   return (
-    <div className={`relative overflow-hidden bg-ink-800 ${className}`} aria-hidden>
+    <div className={`${fill ? 'absolute inset-0' : 'relative'} overflow-hidden bg-ink-800 ${className}`} aria-hidden>
       <svg viewBox="0 0 300 450" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 size-full">
         <defs>
           <linearGradient id={`${id}-bg`} gradientTransform={`rotate(${spec.angle % 90} 0.5 0.5)`}>

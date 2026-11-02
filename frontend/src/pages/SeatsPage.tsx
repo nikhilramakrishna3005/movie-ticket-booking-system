@@ -90,7 +90,8 @@ export function SeatsPage() {
           const sentAt = Date.now();
           const response = await api.createHold(showtimeId, chosen.map((seat) => seat.seatId));
           const receivedAt = Date.now();
-          const skewMs = response.serverDate ? response.serverDate.getTime() - (sentAt + receivedAt) / 2 : 0;
+          // The Date header is truncated to whole seconds; +500 ms is the expected truncation.
+          const skewMs = response.serverDate ? response.serverDate.getTime() + 500 - (sentAt + receivedAt) / 2 : 0;
           saveSession({ hold: response.data, showtime: detail.data, seats: chosen, skewMs, ownerUsername: account.username });
           navigate(`/checkout/${response.data.holdId}`);
           return;
@@ -186,7 +187,7 @@ export function SeatsPage() {
       <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-mist-50 sm:text-4xl">Choose your seats</h1>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
-        <section aria-label="Seat map" className="surface p-4 sm:p-8">
+        <section aria-label="Seat map" className="surface min-w-0 p-4 sm:p-8">
           {seatMap.data && detail.data ? (
             <>
               {closed && <div className="mb-6"><StateMessage tone="warning" title="This showtime was cancelled">Seats can no longer be held.</StateMessage></div>}
@@ -207,7 +208,7 @@ export function SeatsPage() {
           )}
         </section>
 
-        <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+        <aside className="min-w-0 space-y-4 lg:sticky lg:top-20 lg:self-start">
           <div className="surface p-5">
             {detail.data ? <ShowtimeSummary showtime={detail.data} /> : <div className="skeleton h-28" />}
           </div>

@@ -26,7 +26,7 @@ export function seatRows(seats: SeatMapEntry[]): Row[] {
 
 function seatClass(seat: SeatMapEntry, isSelected: boolean): string {
   if (isSelected) return 'bg-violet-500 border-violet-300 text-white shadow-glow';
-  if (seat.status !== 'AVAILABLE') return 'cursor-not-allowed border-transparent bg-ink-700/60 text-transparent';
+  if (seat.status !== 'AVAILABLE') return 'cursor-not-allowed border-white/5 bg-ink-700/70 text-mist-500/70';
   return seat.category === 'PREMIUM'
     ? 'border-gold-300/45 bg-gold-300/8 text-gold-300/80 hover:bg-gold-300/20 hover:text-gold-300'
     : 'border-violet-400/35 bg-violet-400/6 text-violet-300/70 hover:bg-violet-400/20 hover:text-violet-300';
@@ -71,14 +71,14 @@ export function SeatMap({ seats, selected, onToggle, disabled }: SeatMapProps) {
           {rows.map((row, rowIndex) => {
             const aisleAfter = Math.ceil(row.seats.length / 2);
             return (
-              <div key={row.label} className="flex items-center justify-center gap-1.5 sm:gap-2">
+              <div key={row.label} className="flex items-center justify-center gap-1 sm:gap-2">
                 <span className="w-5 text-center text-xs font-semibold text-mist-500" aria-hidden>{row.label}</span>
                 {row.seats.map((seat, colIndex) => {
                   const isSelected = selected.has(seat.seatId);
                   const unavailable = seat.status !== 'AVAILABLE';
                   const state = isSelected ? 'selected' : unavailable ? (seat.status === 'BOOKED' ? 'booked' : 'held') : 'available';
                   return (
-                    <span key={seat.seatId} className={`flex ${colIndex === aisleAfter ? 'ml-4 sm:ml-6' : ''}`}>
+                    <span key={seat.seatId} className={`flex ${colIndex === aisleAfter ? 'ml-3 sm:ml-6' : ''}`}>
                       <button
                         type="button"
                         data-testid="seat"
@@ -93,11 +93,11 @@ export function SeatMap({ seats, selected, onToggle, disabled }: SeatMapProps) {
                         onFocus={() => setFocusId(seat.seatId)}
                         onKeyDown={(event) => move(event, rowIndex, colIndex)}
                         onClick={() => !unavailable && !disabled && onToggle(seat)}
-                        className={`grid size-7 place-items-center rounded-t-lg rounded-b-sm border text-[0.6rem] font-semibold transition-[background-color,color,box-shadow,transform] duration-150 sm:size-8 ${seatClass(seat, isSelected)} ${
+                        className={`grid size-6 place-items-center rounded-t-lg rounded-b-sm border text-[0.6rem] font-semibold transition-[background-color,color,box-shadow,transform] duration-150 sm:size-8 ${seatClass(seat, isSelected)} ${
                           isSelected ? 'scale-105' : ''
                         }`}
                       >
-                        {seat.seatNumber}
+                        {unavailable && !isSelected ? '×' : seat.seatNumber}
                       </button>
                     </span>
                   );
@@ -129,7 +129,7 @@ export function SeatLegend({ prices }: { prices: Array<{ category: string; price
         <span className={`${swatch} border-violet-300 bg-violet-500`} aria-hidden /> Selected
       </li>
       <li className="flex items-center gap-2">
-        <span className={`${swatch} border-transparent bg-ink-700/60`} aria-hidden /> Unavailable
+        <span className={`${swatch} grid place-items-center border-white/5 bg-ink-700/70 text-[0.6rem] leading-none text-mist-500/70`} aria-hidden>×</span> Unavailable
       </li>
     </ul>
   );

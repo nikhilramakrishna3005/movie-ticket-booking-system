@@ -15,7 +15,11 @@ import { ConfirmationPage } from './pages/ConfirmationPage.tsx';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
-  useEffect(() => window.scrollTo(0, 0), [pathname]);
+  // Block body on purpose: newer browsers return a Promise from scrollTo, which React would
+  // otherwise treat as the effect's cleanup function.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
   return null;
 }
 

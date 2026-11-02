@@ -86,8 +86,8 @@ function Ticket({ booking, showtime }: { booking: BookingConfirmation; showtime:
         className="relative mt-10 flex flex-col overflow-hidden rounded-3xl bg-ink-850 shadow-2xl ring-1 ring-white/8 md:flex-row"
         aria-label={`Ticket for ${booking.movieTitle}`}
       >
-        <div className="relative md:w-48">
-          <Poster title={booking.movieTitle} showTitle={false} className="h-32 md:absolute md:inset-0 md:h-auto" />
+        <div className="relative h-32 shrink-0 md:h-auto md:w-48">
+          <Poster title={booking.movieTitle} showTitle={false} fill />
         </div>
 
         <div className="flex-1 p-6 sm:p-8">
@@ -108,14 +108,10 @@ function Ticket({ booking, showtime }: { booking: BookingConfirmation; showtime:
           </dl>
         </div>
 
-        {/* Perforation between the ticket and its stub. */}
-        <div className="relative flex md:flex-col" aria-hidden>
-          <span className="absolute -top-3 -left-3 size-6 rounded-full bg-ink-950 md:-top-3 md:left-1/2 md:-translate-x-1/2" />
-          <span className="absolute -right-3 -bottom-3 size-6 rounded-full bg-ink-950 md:bottom-auto md:-bottom-3 md:left-1/2 md:-translate-x-1/2" />
-          <div className="mx-6 w-full border-t-2 border-dashed border-white/10 md:mx-0 md:my-6 md:h-auto md:w-0 md:border-t-0 md:border-l-2" />
-        </div>
-
-        <div className="flex flex-col justify-between gap-6 p-6 sm:p-8 md:w-60">
+        {/* The stub: a dashed perforation with notches cut into the ticket edge on both ends. */}
+        <div className="relative flex flex-col justify-between gap-6 border-t-2 border-dashed border-white/10 p-6 sm:p-8 md:w-60 md:border-t-0 md:border-l-2">
+          <span className="absolute -top-3.5 -left-3.5 size-6 rounded-full bg-ink-950 md:-top-3.5 md:-left-3.5" aria-hidden />
+          <span className="absolute -top-3.5 -right-3.5 size-6 rounded-full bg-ink-950 md:top-auto md:right-auto md:-bottom-3.5 md:-left-3.5" aria-hidden />
           <div>
             <p className="eyebrow">Booking reference</p>
             <p data-testid="booking-reference" className="mt-2 font-mono text-2xl font-semibold tracking-wider break-all text-violet-300">{booking.reference}</p>

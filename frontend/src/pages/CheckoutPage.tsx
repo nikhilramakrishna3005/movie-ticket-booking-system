@@ -117,7 +117,7 @@ function Checkout({ session }: { session: CheckoutSession }) {
       <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-mist-50 sm:text-4xl">Confirm and pay</h1>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_24rem]">
-        <section className="space-y-6">
+        <section className="min-w-0 space-y-6">
           <div className="surface flex flex-wrap items-center justify-between gap-4 p-5">
             <HoldCountdown remainingMs={left} totalMs={totalMs} />
             <p className="max-w-xs text-sm text-mist-400">
@@ -175,7 +175,7 @@ function Checkout({ session }: { session: CheckoutSession }) {
           </div>
         </section>
 
-        <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+        <aside className="min-w-0 space-y-4 lg:sticky lg:top-20 lg:self-start">
           <div className="surface p-5">
             <ShowtimeSummary showtime={session.showtime} compact />
             <ul className="mt-5 space-y-2 border-t border-white/6 pt-4 text-sm">
