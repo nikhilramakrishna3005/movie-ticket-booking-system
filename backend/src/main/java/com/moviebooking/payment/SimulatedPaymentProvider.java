@@ -66,6 +66,27 @@ public class SimulatedPaymentProvider {
                 .orElse(ProviderChargeStatus.NOT_FOUND));
     }
 
+    /**
+     * Status query used for reconciliation. If the key is unknown, it is fenced: a DECLINED entry
+     * is recorded so that a charge still in flight with this key can no longer capture, and
+     * NOT_FOUND is returned. The ledger's primary key decides atomically whether the late charge
+     * or the fence came first; the loser sees the winner's status. NOT_FOUND therefore means
+     * "never charged and never will be".
+     */
+    public ProviderChargeStatus statusOrFence(String idempotencyKey, BigDecimal amount) {
+        ProviderChargeStatus recorded = status(idempotencyKey);
+        if (recorded != ProviderChargeStatus.NOT_FOUND) {
+            return recorded;
+        }
+        try {
+            ledgerTransaction.executeWithoutResult(tx -> ledger.saveAndFlush(new SimulatedProviderCharge(
+                    idempotencyKey, amount, ProviderChargeStatus.DECLINED, clock.instant())));
+            return ProviderChargeStatus.NOT_FOUND;
+        } catch (DataIntegrityViolationException alreadyRecorded) {
+            return status(idempotencyKey);
+        }
+    }
+
     /** Voids a captured charge (simulated refund). Idempotent; returns the resulting ledger status. */
     public ProviderChargeStatus voidCharge(String idempotencyKey) {
         requireNoTransaction("void");

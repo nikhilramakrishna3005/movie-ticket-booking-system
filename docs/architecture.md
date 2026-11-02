@@ -284,7 +284,8 @@ the second insert. That request returns 409 `ACTIVE_HOLD_EXISTS`.
 ### 6.1 Simulated provider
 
 - `SimulatedPaymentProvider` is one concrete class in `payment` (no interface; there is one
-  implementation). Operations: `charge(key, amount, scenario)`, `status(key)`, `voidCharge(key)`.
+  implementation). Operations: `charge(key, amount, scenario)`, `status(key)`,
+  `statusOrFence(key, amount)` (used by resolution, §6.7), `voidCharge(key)`.
 - It represents an external system. It keeps its own ledger in `simulated_provider_charge`
   (`UNIQUE (idempotency_key)`), written in its **own** short transaction. A second `charge`
   with an existing key returns the recorded result without creating a new charge.
@@ -297,7 +298,7 @@ the second insert. That request returns 409 `ACTIVE_HOLD_EXISTS`.
 | `TIMEOUT` | `CAPTURED` (recorded before the delay) | none within the client timeout: the caller sees a timeout |
 
 `TIMEOUT` deliberately models the hard case: money was taken but the caller does not know it.
-- **Guard:** `charge`, `status` and `voidCharge` throw `IllegalStateException` if called while a transaction is
+- **Guard:** `charge`, `status` (and so `statusOrFence`) and `voidCharge` throw `IllegalStateException` if called while a transaction is
   active (`TransactionSynchronizationManager.isActualTransactionActive()`). This enforces the
   "never inside a DB transaction" rule and is asserted by a test.
 - Delays and timeouts are configured durations. Tests drive them with the injected `Clock` and
@@ -420,7 +421,8 @@ attempts (older than the payment timeout). It runs **on demand** when:
 - the client polls `GET /api/payments/{id}`, or
 - the same idempotency key is replayed.
 
-`resolve` calls `status(key)` outside any transaction and then applies the transitions in §6.3.
+`resolve` calls `statusOrFence(key, amount)` outside any transaction (§6.7) and then applies the
+transitions in §6.3.
 If the ledger says `CAPTURED`, it runs the same TX3 validity check. If the hold is still valid
 it confirms the booking; otherwise it voids.
 
@@ -434,10 +436,27 @@ seats are freed, and a later `resolve` will void the capture.
   always a durable record to resolve.
 - If the app crashes after the charge but before TX3, the attempt stays `PENDING`. Resolution
   later reads the ledger: it confirms the booking if the hold is still valid, otherwise voids.
-- If the app crashes before the charge was sent, the ledger reports `NOT_FOUND`, and resolution
-  records `DECLINED` with `failure_reason = NOT_RECEIVED`. A `PENDING` attempt is treated as
-  "stale" only after the payment client timeout has passed, so resolution does not race a charge
-  that is still in flight. The simulated provider writes its ledger entry at the start of `charge`.
+- If the app crashes before the charge was sent, the ledger has no entry, and resolution
+  records `DECLINED` with `failure_reason = NOT_RECEIVED`. A `PENDING` attempt becomes eligible
+  for resolution after the payment client timeout (5 s). **The timeout alone does not prove the
+  charge is no longer running:** a stalled request thread can still call `charge` afterwards.
+  Resolution therefore uses `statusOrFence(key, amount)`. If the key is unknown, it inserts a
+  `DECLINED` ledger entry for that key, and only then returns `NOT_FOUND`. The ledger's primary
+  key decides atomically whether the late charge or the fence came first, and the loser sees the
+  winner's status. A charge arriving after the fence replays `DECLINED` and never captures. So a
+  `DECLINED` attempt always has a `DECLINED` (never `CAPTURED`) ledger entry for its key.
+  - Simulator detail: the ledger CHECK allows only `CAPTURED`/`DECLINED`/`VOIDED`, so a fence is
+    stored as `DECLINED` (no migration was added). If the app crashes after fencing but before
+    recording the attempt, a later resolution reads `DECLINED` and records `PROVIDER_DECLINED`
+    instead of `NOT_RECEIVED`. The outcome is right; only the reason label is wrong.
+  - **Remaining limitation (real providers):** the fence relies on the provider letting us burn
+    an idempotency key before it has seen it. Real providers generally do not offer this, and
+    their status lookups may lag. With a real provider, a not-found result after a timeout is
+    **not** definitive. The safe general design keeps the attempt `UNKNOWN` (hold not
+    releasable, no new attempt) until the provider settles it. That takes a cancel-by-reference
+    call, the idempotency window expiring, a webhook, or a settlement report, with a refund for
+    any capture that arrives after the hold is gone. This needs provider-specific integration
+    and a scheduled reconciler, both out of scope here.
 - **This relies on properties the simulated provider has by construction:** a durable ledger
   queryable by idempotency key, idempotent charge and void, and `NOT_FOUND` meaning the
   charge never happened. Real providers do not guarantee all of these (e.g. eventual visibility

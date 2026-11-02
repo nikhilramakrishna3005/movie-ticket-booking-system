@@ -86,8 +86,10 @@ public class CheckoutService {
     }
 
     /**
-     * UNKNOWN attempts, and PENDING attempts older than the payment timeout (their charge can no
-     * longer be in flight), are resolved from the provider's ledger.
+     * UNKNOWN attempts, and PENDING attempts older than the payment timeout, are resolved from the
+     * provider's ledger. The original charge may still be running (a stalled request thread), so
+     * an absent ledger entry is fenced rather than merely observed: only then is NOT_FOUND safe
+     * to record as a decline.
      */
     private PaymentView resolveIfDue(PaymentView attempt) {
         boolean due = attempt.status() == PaymentStatus.UNKNOWN
@@ -98,7 +100,7 @@ public class CheckoutService {
         }
         ProviderChargeStatus status;
         try {
-            status = provider.status(attempt.idempotencyKey());
+            status = provider.statusOrFence(attempt.idempotencyKey(), attempt.amount());
         } catch (RuntimeException ex) {
             log.warn("Status query for payment {} failed; still unresolved: {}", attempt.id(), ex.toString());
             return attempt;
@@ -110,7 +112,7 @@ public class CheckoutService {
         return switch (status) {
             case CAPTURED -> completeCapture(attempt);
             case DECLINED -> transactions.recordDeclined(attempt.id(), DeclineReason.PROVIDER_DECLINED);
-            // The ledger affirmatively has no charge for this key: it was never received.
+            // The key was fenced by statusOrFence: no charge happened and none can happen now.
             case NOT_FOUND -> transactions.recordDeclined(attempt.id(), DeclineReason.NOT_RECEIVED);
             case VOIDED -> transactions.recordVoided(attempt.id());
         };

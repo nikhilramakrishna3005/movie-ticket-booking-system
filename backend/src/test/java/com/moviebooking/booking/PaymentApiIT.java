@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.contains;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -352,6 +353,56 @@ class PaymentApiIT {
         verify(provider, times(1)).charge(anyString(), any(), any());
     }
 
+    /**
+     * Ordering: TX2 commits PENDING, the request thread stalls before its charge reaches the
+     * provider, a poll after the payment timeout resolves the attempt, and only then does the
+     * stalled charge run. Controlled by latches; the clock is advanced explicitly.
+     */
+    @Test
+    void stalledChargeArrivingAfterAStaleResolutionCannotCapture() throws Exception {
+        CountDownLatch charging = new CountDownLatch(1);
+        CountDownLatch proceed = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            charging.countDown();
+            assertThat(proceed.await(30, TimeUnit.SECONDS)).isTrue();
+            return invocation.callRealMethod();
+        }).when(provider).charge(anyString(), any(), any());
+        UUID holdId = hold(ALICE, seats.get(0));
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<PaymentOutcome> stalled = executor.submit(() -> checkoutService.pay(db.principal("alice"),
+                    holdId, "key-stalled", PaymentScenario.SUCCESS));
+            assertThat(charging.await(30, TimeUnit.SECONDS)).isTrue();
+            UUID paymentId = jdbcTemplate.queryForObject(
+                    "SELECT id FROM payment_attempt WHERE idempotency_key = 'key-stalled'", UUID.class);
+
+            mockMvc.perform(get("/api/payments/{id}", paymentId).with(ALICE))
+                    .andExpect(jsonPath("$.status").value("PENDING"));
+            clock.advance(PAYMENT_TIMEOUT);
+            mockMvc.perform(get("/api/payments/{id}", paymentId).with(ALICE))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("DECLINED"));
+            assertThat(db.failureReason(paymentId)).isEqualTo("NOT_RECEIVED");
+            assertThat(db.ledgerStatus("key-stalled")).as("the key is fenced").isEqualTo("DECLINED");
+
+            proceed.countDown();
+            assertThat(stalled.get(30, TimeUnit.SECONDS).payment().status()).isEqualTo(PaymentStatus.DECLINED);
+        } finally {
+            proceed.countDown();
+            executor.shutdownNow();
+        }
+
+        assertThat(db.ledgerStatus("key-stalled")).as("the late charge did not capture").isEqualTo("DECLINED");
+        assertThat(db.count("booking")).isZero();
+        verify(provider, never()).voidCharge(anyString());
+        assertThat(db.holdStatus(holdId)).isEqualTo("ACTIVE");
+
+        pay(ALICE, holdId, "key-retry", "SUCCESS").andExpect(status().isCreated());
+        assertThat(db.count("booking")).isOne();
+        assertThat(db.ledgerStatus("key-stalled")).isEqualTo("DECLINED");
+    }
+
     @Test
     void holdWithUnknownPaymentCannotBeReleased() throws Exception {
         UUID holdId = hold(ALICE, seats.get(0));
@@ -372,7 +423,7 @@ class PaymentApiIT {
             return invocation.callRealMethod();
         };
         doAnswer(recordTransactionState).when(provider).charge(anyString(), any(), any());
-        doAnswer(recordTransactionState).when(provider).status(anyString());
+        doAnswer(recordTransactionState).when(provider).statusOrFence(anyString(), any());
         doAnswer(recordTransactionState).when(provider).voidCharge(anyString());
 
         pay(ALICE, hold(ALICE, seats.get(0)), "key-a", "SUCCESS").andExpect(status().isCreated());
@@ -383,7 +434,7 @@ class PaymentApiIT {
                 .andExpect(jsonPath("$.status").value("VOIDED"));
 
         verify(provider, times(2)).charge(anyString(), any(), any());
-        verify(provider, times(1)).status("key-b");
+        verify(provider, times(1)).statusOrFence(eq("key-b"), any());
         verify(provider, times(1)).voidCharge("key-b");
         assertThat(transactionActive).hasSize(4).containsOnly(false);
     }
@@ -427,7 +478,7 @@ class PaymentApiIT {
         jdbcTemplate.execute("DROP TRIGGER fail_outbox_insert ON outbox_event");
         mockMvc.perform(get("/api/payments/{id}", paymentId).with(ALICE))
                 .andExpect(jsonPath("$.status").value("PENDING"));
-        verify(provider, never()).status(anyString());
+        verify(provider, never()).statusOrFence(anyString(), any());
 
         clock.advance(PAYMENT_TIMEOUT);
         mockMvc.perform(get("/api/payments/{id}", paymentId).with(ALICE))
