@@ -1,9 +1,10 @@
 # ADR 0003: Defer Apache Solr (typo-tolerant search)
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-02)
 - **Date:** 2026-11-02 (revised 2026-11-02 after review of PR #1)
-- **Deciders:** _Pending human review_
-- **Implementation note (final audit, 2026-11-02):** as decided, Solr is not used. It is absent from `backend/pom.xml`, `frontend/package.json` and `docker-compose.yml`. Search uses PostgreSQL `pg_trgm` word similarity with GIN indexes (V1, V6), covered by `DiscoveryApiIT` and `DatabaseSchemaIT`. Index use at scale has not been measured. The status stays "Proposed" because no formal acceptance by the human owner is recorded; the ADR was merged with the planning documents in PR #1.
+- **Status history:** Proposed 2026-11-02 (PR #1, merged with the planning documents); Accepted 2026-11-02 by the human engineering owner during review of PR #9, which kept the component deferred for the reasons below.
+- **Deciders:** human engineering owner (accepted 2026-11-02)
+- **Implementation note (final audit, 2026-11-02):** as decided, Solr is not used. It is absent from `backend/pom.xml`, `frontend/package.json` and `docker-compose.yml`. Search uses PostgreSQL `pg_trgm` word similarity with GIN indexes (V1, V6), covered by `DiscoveryApiIT` and `DatabaseSchemaIT`. Index use at scale has not been measured.
 
 ## Context / Problem
 

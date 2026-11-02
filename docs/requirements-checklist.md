@@ -34,7 +34,7 @@
 | Simulated in-process payment (success, failure, timeout) | Complete | `SimulatedPaymentProvider` with its own ledger table; scenarios `SUCCESS` / `DECLINE` / `TIMEOUT` |
 | Spring Security, HTTP Basic, seeded demo users | Complete | `SecurityConfig`; V8 BCrypt users |
 | Injectable UTC `Clock` for all expiry logic | Complete | `ClockConfig`. No `Instant.now()`, `LocalDateTime.now()` or SQL `NOW()` in `backend/src/main` (checked with `rg`). Tests use `MutableClock`. |
-| Redis, Kafka, Solr deferred with ADRs | Complete (ADR acceptance open) | None of them is in `pom.xml`, `package.json` or `docker-compose.yml`. ADRs 0001–0003 exist, but their status is still "Proposed": human acceptance is not recorded. |
+| Redis, Kafka, Solr deferred with ADRs | Complete | None of them is in `pom.xml`, `package.json` or `docker-compose.yml`. ADRs 0001–0003 were accepted by the human owner on 2026-11-02. |
 
 ## 3. Module boundaries (`AGENTS.md` §3)
 
@@ -140,7 +140,7 @@
 | Architecture diagram and booking/payment flow | Complete | `docs/architecture.md` §2, §6.3, §6.4 |
 | ERD matching V1–V9 | Complete | `docs/data-model.md` |
 | API reference | Complete | `docs/api.md` |
-| Redis, Kafka and Solr ADRs | Complete (acceptance open) | `docs/decisions/0001`–`0003` |
+| Redis, Kafka and Solr ADRs | Complete (accepted 2026-11-02) | `docs/decisions/0001`–`0003` |
 | Test strategy | Complete | `docs/test-strategy.md` |
 | AI workflow record | Complete | `docs/ai-workflow.md` |
 
@@ -153,7 +153,8 @@
 | Backend: `./mvnw -B clean verify` | 59/59 unit tests, 132/132 integration tests, BUILD SUCCESS |
 | Frontend: `npm test`; `npm run build` | 34/34 pass; build succeeds |
 | Playwright on the clean stack, two runs | 3/3, then 3/3 |
-| Clean checkout following only the README | A fresh `git clone` (no `.env`) ran `cp .env.example .env && docker compose up --build -d --wait` and became healthy. In the clone, `npm ci`, `npm test` (34/34), `npm run build`, `npx playwright install --with-deps chromium` and `npm run test:e2e` (3/3 on two runs) passed, and `backend/./mvnw -B clean verify` passed (59/59 unit, 132/132 integration, BUILD SUCCESS). Docker's build cache was warm from earlier builds in the same VM, so the startup time (~27 s) does not reflect a cold build. |
+| Single runner: `./run-tests.sh` against the running stack | Exit 0: backend 59/59 unit and 132/132 integration, frontend 34/34, Playwright 3/3, no skipped tests. It exits 1 on a failing test, a skipped unit or E2E test, or an unhealthy stack (each checked once). |
+| Clean checkout following only the README | A fresh `git clone` (no `.env`) ran `cp .env.example .env && docker compose up --build -d --wait` and became healthy. In the clone, `npm ci`, `npm test` (34/34), `npm run build`, `npx playwright install --with-deps chromium` and `npm run test:e2e` (3/3 on two runs) passed, and `cd backend && ./mvnw -B clean verify` passed (59/59 unit, 132/132 integration, BUILD SUCCESS). Docker's build cache was warm from earlier builds in the same VM, so the startup time (~27 s) does not reflect a cold build. |
 | Hosted services needed at runtime | None. Payment is in-process, and fonts and posters are bundled or generated locally. |
 | Non-portable environment assumptions | The agent VM needed `sudo iptables-legacy -P FORWARD ACCEPT` once, because a stale legacy `FORWARD DROP` policy blocked container-to-container traffic. This was re-confirmed during the audit: with DROP restored, nginx could not reach the backend. It is a VM property, not a project requirement, and is documented in the README troubleshooting section. Host ports 3000 and 5432 must be free or overridden in `.env`. |
 
@@ -164,6 +165,5 @@
 - E2E tests do not cover timeout/`UNKNOWN` polling, hold expiry, keyboard-only use or mobile
   viewports; these are covered at the API or unit level, or not at all (`docs/test-strategy.md`).
 - No load testing, so no scalability claim.
-- The ADRs are still "Proposed": the human owner's formal acceptance is not recorded.
 - The sample data, and the E2E screen lookup, stop working after 2027-01-31.
 - Engineering time was not tracked precisely.

@@ -82,6 +82,7 @@ Record only findings from human reviews that actually took place. Do not pre-pop
 | 2026-11-02 | Task 07 / PR #7 | The interactive browser test session the AI agent started was stopped from the owner's side. | The AI agent switched to a throwaway headless-Chrome script in `/tmp` (not committed) for manual flow checks, and said so in its report. |
 | 2026-11-02 | Task 08 / PR #8 | **Human review found** that the E2E fixture `findScreenId()` sent `city=1` to `GET /api/showtimes`, whose parameter is `cityId`. The API ignores unknown parameters, so the filter was silently not applied. | Fixed in `5a3c6d1`: the fixture uses `cityId` and asserts every returned showtime is in Dallas, so an unapplied filter fails the test. Against the running stack, `city=1` returned cities 1, 2 and 3; `cityId=1` returned only city 1. Playwright 3/3 on two runs. |
 | 2026-11-02 | Task 09 (final audit, prompt) | The owner asked for a submission audit: honest requirements checklist, documentation from the actual code, Git and secret checks, a clean-start verification, no invented hours, and no new features. | This PR. Results are in `docs/requirements-checklist.md` and `docs/test-strategy.md`. |
+| 2026-11-02 | Task 09 / PR #9 (review) | The owner accepted ADRs 0001–0003 (Redis, Kafka and Solr stay deferred), and asked for one root-level command that runs every test suite and fails on any failure or skipped test. | ADR statuses set to Accepted, with the status history kept; `run-tests.sh` added and verified (`docs/test-strategy.md`). |
 
 ## 5. AI mistakes observed
 

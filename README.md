@@ -17,7 +17,7 @@ React 19 and Docker Compose.
 | Data model (ERD from Flyway V1–V9) | [`docs/data-model.md`](docs/data-model.md) |
 | REST API reference | [`docs/api.md`](docs/api.md) |
 | Test strategy and final results | [`docs/test-strategy.md`](docs/test-strategy.md) |
-| Decisions: Redis, Kafka, Solr deferred | [`docs/decisions/`](docs/decisions/) |
+| Decisions: Redis, Kafka, Solr deferred (accepted) | [`docs/decisions/`](docs/decisions/) |
 | AI-assisted workflow record | [`docs/ai-workflow.md`](docs/ai-workflow.md) |
 | Sample data | [`docs/sample-data.md`](docs/sample-data.md) |
 
@@ -123,6 +123,22 @@ admins use `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
 The full status is in [`docs/requirements-checklist.md`](docs/requirements-checklist.md).
 
 ## Running the tests
+
+**All suites, one command.** With the stack running (`docker compose up --build -d --wait`), from
+the repository root:
+
+```bash
+./run-tests.sh
+```
+
+It runs the backend unit and integration tests, the frontend unit tests and the Playwright E2E
+tests against the running stack, in that order. It stops at the first failure with a non-zero exit
+code. It also fails if the stack is not healthy, or if any suite reports a skipped test.
+It needs bash, curl, JDK 21, Node 22.18+ and Docker. It has been run on Linux only.
+On Windows, use WSL. The first E2E run on a new machine needs the browser's system libraries once:
+`cd frontend && npx playwright install --with-deps chromium` (uses sudo on Linux).
+
+Each suite can also be run on its own:
 
 | Suite | Command | Needs |
 |---|---|---|

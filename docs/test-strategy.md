@@ -16,6 +16,11 @@
 These counts are executed test cases, including parameterized and repeated cases, as reported
 by Surefire, Failsafe, Node and Playwright.
 
+`./run-tests.sh` at the repository root runs all four levels in order against the running Compose
+stack. It stops at the first failure and also fails if any suite reports a skipped test. Maven runs
+with `-DskipTests=false -Dmaven.test.skip=false`, and Playwright runs with `--forbid-only`, so
+neither environment settings nor a stray `.only` can narrow the run.
+
 ## Principles
 
 - **Real PostgreSQL only.** Integration tests run against the `postgres:16-alpine` image through
@@ -101,7 +106,8 @@ can run in parallel without a database reset. Selectors are `data-testid` only.
 
 Run in the Cursor cloud agent VM (Ubuntu 24.04, Docker 29.1.3, Compose 2.40.3, OpenJDK 21.0.12,
 Node 22.23.4) on branch `cursor/final-submission-audit-d450`. The source
-was unchanged from `origin/main` at `3081f0d`; only documentation was added.
+was unchanged from `origin/main` at `3081f0d`; only documentation and the `run-tests.sh` runner
+were added.
 
 | Command | Result |
 |---|---|
@@ -111,6 +117,16 @@ was unchanged from `origin/main` at `3081f0d`; only documentation was added.
 | `cd frontend && npm test` | 34 tests, 34 pass, 0 fail |
 | `cd frontend && npm run build` | Type-check and Vite build succeed |
 | `cd frontend && npm run test:e2e` (twice) | 3 passed, then 3 passed |
+| `./run-tests.sh` (all suites, stack running) | Exit 0. Backend 59 unit and 132 integration (0 failures, 0 errors, 0 skipped), frontend 34/34 (0 skipped), Playwright 3 passed |
+
+**Runner failure checks.** Each case was run once, and each temporary file was deleted afterwards:
+
+| Case | Exit code and message |
+|---|---|
+| A failing frontend unit test | 1; `npm test` failed (`# fail 1`) |
+| A skipped frontend unit test | 1; `frontend unit tests reported skipped tests` |
+| A `test.skip` Playwright test | 1; `Playwright reported skipped tests` |
+| Frontend container stopped | 1; `the Compose stack is not healthy at http://localhost:3000` |
 
 The README's clean-checkout steps were also followed in a fresh `git clone`; the results are in
 `docs/requirements-checklist.md`.
