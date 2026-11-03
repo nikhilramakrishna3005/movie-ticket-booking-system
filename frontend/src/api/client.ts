@@ -9,6 +9,7 @@ import type {
   Hold,
   Language,
   Movie,
+  NotificationPage,
   NewShowtimeRequest,
   PaymentResponse,
   PaymentScenario,
@@ -199,6 +200,8 @@ export function createApiClient(options: ApiClientOptions) {
     booking: (bookingId: string) => get<BookingConfirmation>(`/api/bookings/${bookingId}`),
     /** The server derives the customer from the credentials; there is no customer parameter to send. */
     bookings: (params: BookingHistoryParams = {}) => get<BookingHistoryPage>(`/api/bookings${toQuery(params)}`),
+    notifications: (params: BookingHistoryParams = {}) =>
+      get<NotificationPage>(`/api/notifications${toQuery(params)}`),
     adminTheaters: () => get<TheaterOverview[]>('/api/admin/theaters'),
     adminSchedule: (theaterId: number, date?: string) =>
       get<TheaterSchedule>(`/api/admin/theaters/${theaterId}/showtimes${toQuery({ date })}`),

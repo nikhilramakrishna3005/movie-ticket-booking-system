@@ -32,6 +32,7 @@ public final class HoldFixtures {
      * cancelled showtimes, no test users. Deletes follow the foreign keys.
      */
     public void reset() {
+        jdbc.update("DELETE FROM notification_inbox");
         jdbc.update("DELETE FROM outbox_event");
         jdbc.update("UPDATE show_seat SET status = 'AVAILABLE', hold_id = NULL, hold_expires_at = NULL,"
                 + " booking_id = NULL WHERE status <> 'AVAILABLE'");

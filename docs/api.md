@@ -31,6 +31,7 @@
 | `POST /api/holds/{holdId}/payment` | customer (owner) | 201 booked; 202 `UNKNOWN` | 400; 402 `PAYMENT_DECLINED`; 404; 409 `PAYMENT_VOIDED` / `PAYMENT_IN_PROGRESS` / `HOLD_EXPIRED` / `HOLD_NOT_ACTIVE` / `HOLD_TOO_CLOSE_TO_EXPIRY` / `TOO_MANY_ATTEMPTS` / `SEATS_BUSY`; 422 `IDEMPOTENCY_KEY_REUSED` |
 | `GET /api/payments/{paymentId}` | customer (owner) | 200 payment | 404 |
 | `GET /api/bookings` | customer (own bookings only) | 200 page | 400 `INVALID_REQUEST` |
+| `GET /api/notifications` | customer (own inbox only) | 200 page | 400 `INVALID_REQUEST` |
 | `GET /api/bookings/{bookingId}` | customer (owner) | 200 booking | 404 |
 | `POST /api/admin/showtimes` | theater admin, assigned theaters only | 201 created showtime | 400 `INVALID_REQUEST` / `INVALID_START_TIME`; 403; 409 `SHOWTIME_OVERLAP` / `SCREEN_BUSY` |
 | `POST /api/admin/showtimes/{id}/cancel` | theater admin, assigned | 200 cancelled | 403; 404; 409 `SHOWTIME_HAS_BOOKINGS` / `SHOWTIME_HAS_UNRESOLVED_PAYMENTS` / `SHOWTIME_HAS_ACTIVE_HOLDS` |
@@ -47,8 +48,9 @@ Rules for every protected endpoint:
 - Another customer's hold, payment or booking: 404 `NOT_FOUND`, so their IDs are not revealed.
 
 **Designed but not implemented:**
-- Background workers (outbox relay, hold sweeper, scheduled payment reconciliation)
+- Hold sweeper and scheduled payment reconciliation
 - Customer booking cancellation / refunds
+- Kafka (the local outbox poller is not a broker; ADR 0002)
 
 ## Errors
 
@@ -306,6 +308,19 @@ example, `page=1001` returns:
 
 ```json
 {"code":"INVALID_REQUEST","message":"page must be between 0 and 1000","details":{"parameter":"page"}}
+```
+
+### `GET /api/notifications`
+
+The signed-in customer's local inbox from the outbox relay, newest first. The customer comes
+from the credentials. A theater admin gets 403. Bob does not see Alice's rows; he gets an empty
+page, not her event ids. This is not email.
+
+Paging matches `GET /api/bookings` (`page` 0–1000, `size` default 10, capped at 50).
+
+```json
+{"items":[{"id":"…","eventId":"…","bookingId":"…","eventType":"BookingConfirmed","reference":"9956RB4M","createdAt":"2026-11-03T17:27:54.383776Z"}],
+ "page":0,"size":10,"totalItems":1,"totalPages":1}
 ```
 
 ### `GET /api/bookings/{bookingId}`

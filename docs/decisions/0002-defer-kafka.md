@@ -4,7 +4,7 @@
 - **Date:** 2026-11-02 (revised 2026-11-02 after review of PR #1)
 - **Status history:** Proposed 2026-11-02 (PR #1, merged with the planning documents); Accepted 2026-11-02 by the human engineering owner during review of PR #9, which kept the component deferred for the reasons below.
 - **Deciders:** human engineering owner (accepted 2026-11-02)
-- **Implementation note (final audit, 2026-11-02):** as decided, Kafka is not used. It is absent from `backend/pom.xml`, `frontend/package.json` and `docker-compose.yml`. The booking transaction writes a `BookingConfirmed` row to `outbox_event` (asserted by `PaymentApiIT`). No relay or broker delivers it; `published_at` stays `NULL`.
+- **Implementation note (Task 13, 2026-11-03):** Kafka is still not used. It is absent from `backend/pom.xml`, `frontend/package.json` and `docker-compose.yml`. The booking transaction writes a `BookingConfirmed` row to `outbox_event`. An in-process Spring scheduler claims unpublished rows with `FOR UPDATE SKIP LOCKED` and a per-claim `claim_token`, writes `notification_inbox` with `INSERT … ON CONFLICT (event_id) DO NOTHING`, then sets `published_at` only if that token still owns the unpublished row. The 30 s lease is a visibility timeout, not cancellation of in-flight work. That is at-least-once local delivery, not a Kafka topic, CDC pipeline or exactly-once network send. Tests disable the scheduler and call `OutboxDispatcher.dispatchDue()` with the injectable Clock (`OutboxDeliveryIT`).
 
 ## Context / Problem
 
@@ -34,11 +34,10 @@ the database commit (a "dual write") risks losing events on a crash between comm
 
 - **Required:** the `booking` package writes an `outbox_event` row in the same transaction that
   creates the booking, so the event exists exactly when the booking exists. Tests assert this.
-- **Stretch (on the cut list):** a scheduled relay (`FOR UPDATE SKIP LOCKED`) that delivers
-  events to a stub notifier and marks them published. Delivery would be at-least-once, so
-  consumers deduplicate by event id. It is a background worker, and per the review of PR #1,
-  background workers are cut before correctness or required verification. If it is cut, the
-  outbox rows remain the documented integration seam and are not delivered.
+- **Local relay (Task 13):** a scheduled in-process dispatcher claims unpublished rows with
+  `FOR UPDATE SKIP LOCKED`, writes `notification_inbox` keyed by event id, then sets
+  `published_at`. Delivery is at-least-once inside this JVM. Kafka, CDC, email and a
+  distributed consumer remain deferred. The outbox table is still the seam for Option B later.
 - The outbox table is the seam where Kafka could later be attached (Option B) without changing
   the booking transaction.
 

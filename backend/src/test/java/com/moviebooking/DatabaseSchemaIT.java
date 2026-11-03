@@ -46,7 +46,7 @@ class DatabaseSchemaIT {
         var versions = jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class);
 
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13");
     }
 
     @Test
@@ -106,6 +106,32 @@ class DatabaseSchemaIT {
 
         assertThat(definition).contains("(customer_id, created_at DESC, id DESC)");
         assertThat(count("SELECT count(*) FROM pg_indexes WHERE indexname = 'booking_customer_idx'")).isZero();
+    }
+
+    @Test
+    void unpublishedOutboxRowsAreIndexedForTheRelay() {
+        String due = jdbc.queryForObject(
+                "SELECT indexdef FROM pg_indexes WHERE indexname = 'outbox_event_due_idx'", String.class);
+        String history = jdbc.queryForObject(
+                "SELECT indexdef FROM pg_indexes WHERE indexname = 'notification_inbox_customer_history_idx'",
+                String.class);
+
+        assertThat(due).contains("WHERE (published_at IS NULL)");
+        assertThat(history).contains("(customer_id, created_at DESC, id DESC)");
+        assertThat(count("""
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_name = 'outbox_event' AND column_name = 'claim_token'
+                """)).isOne();
+    }
+
+    @Test
+    void theSameOutboxEventCannotBeDeliveredTwiceToTheInbox() {
+        long customer = insertUser("cust-inbox", "CUSTOMER");
+        UUID event = UUID.randomUUID();
+        insertInbox(event, customer, "BOOKREF1");
+
+        assertViolation(() -> insertInbox(event, customer, "BOOKREF1"),
+                UNIQUE_VIOLATION, "notification_inbox_event_uk");
     }
 
     @Test
@@ -459,6 +485,15 @@ class DatabaseSchemaIT {
         UUID hold = insertHold(customer, showtime, "CONVERTED");
         UUID attempt = insertAttempt(hold, key, "SUCCEEDED", null);
         return insertBooking(customer, showtime, hold, attempt, reference);
+    }
+
+    private void insertInbox(UUID eventId, long customer, String reference) {
+        jdbc.update("""
+                INSERT INTO notification_inbox
+                    (id, event_id, customer_id, booking_id, event_type, payload, created_at)
+                VALUES (?, ?, ?, ?, 'BookingConfirmed', CAST(? AS jsonb), ?)
+                """, UUID.randomUUID(), eventId, customer, UUID.randomUUID(),
+                "{\"reference\":\"" + reference + "\",\"customerId\":" + customer + "}", ts(T0));
     }
 
     private void insertBookingSeat(UUID booking, long showtime, long seat) {

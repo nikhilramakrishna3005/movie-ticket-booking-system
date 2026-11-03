@@ -293,3 +293,20 @@ export interface CancelledShowtime {
   screenId: number;
   status: ShowtimeStatus;
 }
+
+export interface NotificationItem {
+  id: string;
+  eventId: string;
+  bookingId: string;
+  eventType: string;
+  reference: string | null;
+  createdAt: string;
+}
+
+export interface NotificationPage {
+  items: NotificationItem[];
+  page: number;
+  size: number;
+  totalItems: number;
+  totalPages: number;
+}

@@ -57,7 +57,8 @@ public class SecurityConfig {
                                 "/api/showtimes/*", "/api/showtimes/*/seats").permitAll()
                         .requestMatchers("/api/admin/**").hasRole(Role.THEATER_ADMIN.name())
                         .requestMatchers(HttpMethod.POST, "/api/showtimes/*/holds").hasRole(Role.CUSTOMER.name())
-                        .requestMatchers("/api/holds/**", "/api/payments/**", "/api/bookings/**")
+                        .requestMatchers("/api/holds/**", "/api/payments/**", "/api/bookings/**",
+                                "/api/notifications/**")
                         .hasRole(Role.CUSTOMER.name())
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll());

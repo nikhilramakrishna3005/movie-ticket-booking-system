@@ -26,6 +26,15 @@ booking:
   payment-min-remaining: 60s
   # A PENDING attempt older than this can no longer have a charge in flight and may be resolved.
   payment-timeout: 5s
+  outbox:
+    # Tests disable the scheduler and call OutboxDispatcher.dispatchDue() explicitly.
+    enabled: true
+    poll-interval: 2s
+    batch-size: 20
+    claim-lease: 30s
+    backoff-initial: 1s
+    backoff-max: 60s
+    max-attempts: 8
 
 server:
   # Honors X-Forwarded-* from a same-origin reverse proxy in front of the React app and the API.

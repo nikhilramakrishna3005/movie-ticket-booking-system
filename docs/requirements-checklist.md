@@ -16,7 +16,7 @@
 |---|---|---|---|
 | No seat is ever sold twice | Complete | Ordered `FOR UPDATE` locks in `HoldService` and `CheckoutTransactions`; `booking_seat UNIQUE (showtime_id, seat_id)` | `HoldConcurrencyIT`, `PaymentConcurrencyIT`, `DatabaseSchemaIT.aSeatCannotBeBookedTwiceForTheSameShowtime`, E2E decline-retry test |
 | An expired hold is never converted into a booking | Complete | TX3 validity check under lock with `clock.instant()`; void path in `CheckoutService` | `PaymentApiIT.captureArrivingAfterHoldExpiryIsVoidedEvenThoughTheSeatsAreFree`, `…unknownPaymentResolvedAfterHoldExpiryIsVoidedAndBooksNothing` |
-| Behavior proven by automated tests, especially concurrency | Complete | 64 + 174 backend, 52 frontend unit and 9 E2E tests, all passing | `docs/test-strategy.md` |
+| Behavior proven by automated tests, especially concurrency | Complete | 66 + 186 backend, 53 frontend unit and 9 E2E tests, all passing | `docs/test-strategy.md` |
 | Explicit tradeoffs | Complete | ADRs 0001–0003; architecture §6.7 (provider limits), §7 (multi-instance clock), §12 (scale); README known limitations | — |
 | Clear module ownership | Complete (by convention) | Packages `catalog`, `theater`, `booking`, `payment`, `admin`, `security` (plus `config`) | Enforced by review only; no ArchUnit test (as `AGENTS.md` §3 allows) |
 | 10-hour budget | Not tracked | — | Time was not tracked precisely, so no actual hours are claimed (`docs/implementation-plan.md` §6) |
@@ -25,12 +25,12 @@
 
 | Requirement | Status | Implementation / evidence |
 |---|---|---|
-| Java 17+, Spring Boot, REST/JSON | Complete | Java 21, Spring Boot 3.5 (`backend/pom.xml`); 21 listed endpoints including health (`docs/api.md`) |
+| Java 17+, Spring Boot, REST/JSON | Complete | Java 21, Spring Boot 3.5 (`backend/pom.xml`); 23 listed endpoints including health (`docs/api.md`) |
 | PostgreSQL as the authoritative seat owner | Complete | `show_seat`, `seat_hold` and `booking_seat` in PostgreSQL 16; no cache |
-| Flyway migrations, no `ddl-auto` generation | Complete | V1–V11; `spring.jpa.hibernate.ddl-auto: validate`; `DatabaseSchemaIT.allMigrationsApplyInOrder` |
+| Flyway migrations, no `ddl-auto` generation | Complete | V1–V13; `spring.jpa.hibernate.ddl-auto: validate`; `DatabaseSchemaIT.allMigrationsApplyInOrder` |
 | React frontend | Complete | React 19 + TypeScript + Vite (`frontend/`) |
 | Docker Compose, whole system local, no cloud dependencies | Complete | `docker-compose.yml` (postgres, backend, frontend). After the images are built, no hosted service is used. Building downloads base images and Maven and npm packages once. |
-| JUnit 5, Spring Boot integration tests, Testcontainers PostgreSQL | Complete | 174 `*IT` tests on `postgres:16-alpine` |
+| JUnit 5, Spring Boot integration tests, Testcontainers PostgreSQL | Complete | 186 `*IT` tests on `postgres:16-alpine` |
 | Playwright, at least 2 tests | Complete | 9 tests in `frontend/e2e/` |
 | Simulated in-process payment (success, failure, timeout) | Complete | `SimulatedPaymentProvider` with its own ledger table; scenarios `SUCCESS` / `DECLINE` / `TIMEOUT` |
 | Spring Security, HTTP Basic, seeded demo users | Complete | `SecurityConfig`; V8 demo users and V11 Playwright customers (BCrypt hashes) |
@@ -128,7 +128,7 @@
 | 3.3 Hold seats | Complete | 1–10 seats, 8-minute TTL, one active hold per showtime |
 | 3.4 Pay and confirm | Complete | Success, decline with retry, timeout with polling, late-capture void, at most 3 attempts |
 | 3.5 Abandonment and release | Complete | Lazy expiry; release blocked while a payment is in flight |
-| 3.6 View my bookings | Complete (Task 10) | `GET /api/bookings` (own confirmed bookings, newest first, paginated) and the My Tickets screen at `/tickets`. `BookingHistoryApiIT`, `history.test.ts`, `my-tickets.spec.ts`. |
+| 3.6 View my bookings | Complete (Task 10) | `GET /api/bookings` (own confirmed bookings, newest first, paginated) and the My Tickets screen at `/tickets`. `BookingHistoryApiIT`, `history.test.ts`, `my-tickets.spec.ts`. Task 13 adds the local inbox (`GET /api/notifications`, `/notifications`) from the outbox relay. |
 | 3.7 Admin theaters, screens and showtimes | Complete (Task 11–12) | Assigned-theater APIs, screen add / layout replace-before-first-showtime, `/admin` dashboard, showtime cancellation (409 when bookings, unresolved payments or live holds exist). `AdminTheaterApiIT`, `ShowtimeCancellationIT`, `forms.test.ts`, `admin.spec.ts`. |
 
 ## 9. Required documentation (`docs/implementation-plan.md` Phase 7)
@@ -139,7 +139,7 @@
 | Product scope and deferred features | Complete | `docs/product-scope.md` (§4 non-goals, §8 delivery status) |
 | Roles and permissions matrix | Complete | `docs/architecture.md` §8.1 (marked as implemented or not) |
 | Architecture diagram and booking/payment flow | Complete | `docs/architecture.md` §2, §6.3, §6.4 |
-| ERD matching V1–V11 | Complete | `docs/data-model.md` |
+| ERD matching V1–V13 | Complete | `docs/data-model.md` |
 | API reference | Complete | `docs/api.md` |
 | Redis, Kafka and Solr ADRs | Complete (accepted 2026-11-02) | `docs/decisions/0001`–`0003` |
 | Test strategy | Complete | `docs/test-strategy.md` |
@@ -197,10 +197,36 @@ A clean `docker compose down -v` start was not run for Task 11, to keep the loca
 
 A clean `docker compose down -v` start was not run for Task 12, to keep the local database.
 
+**Task 13 (2026-11-03, same Mac, existing Compose stack and database kept):**
+
+| Check | Result |
+|---|---|
+| Backend: `./mvnw -B clean verify` (JDK 23) | 66/66 unit tests, 184/184 integration tests, BUILD SUCCESS |
+| Frontend: `npm test`; `npm run build` | 53/53 pass; build succeeds |
+| Stack rebuilt in place: `docker compose up -d --build --wait` (no `down -v`) | All three services healthy; Flyway applied V12; booking `9956RB4M` still `CONFIRMED` |
+| Playwright against the running stack | 9/9 |
+| Single runner: `./run-tests.sh` against the running stack | Exit 0: backend 66/66 unit and 184/184 integration, frontend 53/53, Playwright 9/9, no skipped tests |
+
+A clean `docker compose down -v` start was not run for Task 13, to keep the local database.
+
+**Task 13 review fixes (2026-11-03, same branch and database):**
+
+| Check | Result |
+|---|---|
+| Backend: `./mvnw -B clean verify` (JDK 23) | 66/66 unit tests, 186/186 integration tests, BUILD SUCCESS |
+| Frontend: `npm test`; `npm run build` | 53/53 pass; build succeeds |
+| Stack rebuilt in place: `docker compose up -d --build --wait` (no `down -v`) | All three services healthy; Flyway applied V13; booking `9956RB4M` still `CONFIRMED` |
+| Playwright against the running stack | 9/9 |
+| Single runner: `./run-tests.sh` against the running stack | Exit 0: backend 66/66 unit and 186/186 integration, frontend 53/53, Playwright 9/9, no skipped tests |
+
 ## 11. Remaining gaps (honest summary)
 
-- Not implemented: background workers (outbox relay, cleanup, scheduled reconciliation);
-  customer booking cancellation / refunds.
+- Not implemented: hold-cleanup sweeper, scheduled payment reconciliation;
+  customer booking cancellation / refunds. Kafka remains deferred (ADR 0002).
+- Outbox delivery is at-least-once inside this JVM. After eight failed claims an event stays
+  unpublished with `last_error`. A 30 s claim lease is a visibility timeout; stale ack/failure
+  is rejected when `claim_token` no longer matches. There is no email or exactly-once network
+  delivery.
 - Showtime cancellation refuses while a simulated payment is `PENDING` or `UNKNOWN`. If that
   attempt then captures, the show has bookings and cannot be cancelled; Cinéva does not void
   or refund it. Live holds are also refused rather than force-invalidated.
