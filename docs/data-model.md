@@ -201,6 +201,15 @@ Timestamps have no database defaults. The application sets them from the injecte
 (`docs/architecture.md` §7). The one default in V9 (`city.time_zone`) backfills existing rows
 and is dropped in the same migration.
 
+## Screen layouts (no new migration)
+
+Task 11 adds screens and can replace a seating plan **only while that screen has never had a
+showtime**, including cancelled or past ones. After the first showtime, `show_seat` and
+`booking_seat` reference the physical seats, so changing them would rewrite tickets. The
+application takes the same `screen` `FOR UPDATE` lock that showtime creation uses; the
+composite FK `show_seat (seat_id, screen_id) → seat` (no `ON DELETE`) is the database backstop.
+No Flyway migration was added.
+
 ## Booking history reads
 
 `GET /api/bookings` adds no columns and copies no data. A page of bookings is read through

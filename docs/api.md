@@ -21,6 +21,7 @@
 | `GET /api/auth/me` | any signed-in user | 200 profile | 401 |
 | `GET /api/cities` | anyone | 200 list | — |
 | `GET /api/movies` | anyone | 200 list | — |
+| `GET /api/languages` | anyone | 200 list | — |
 | `GET /api/showtimes` | anyone | 200 page | 400 `INVALID_REQUEST` |
 | `GET /api/showtimes/{id}` | anyone | 200 detail | 404 |
 | `GET /api/showtimes/{id}/seats` | anyone | 200 seat map | 404 |
@@ -31,6 +32,11 @@
 | `GET /api/bookings` | customer (own bookings only) | 200 page | 400 `INVALID_REQUEST` |
 | `GET /api/bookings/{bookingId}` | customer (owner) | 200 booking | 404 |
 | `POST /api/admin/showtimes` | theater admin, assigned theaters only | 201 created showtime | 400 `INVALID_REQUEST` / `INVALID_START_TIME`; 403; 409 `SHOWTIME_OVERLAP` / `SCREEN_BUSY` |
+| `GET /api/admin/theaters` | theater admin | 200 assigned theaters | 401; 403 |
+| `GET /api/admin/theaters/{id}/showtimes` | theater admin, assigned | 200 day's schedule | 400 `INVALID_REQUEST`; 403 |
+| `POST /api/admin/theaters/{id}/screens` | theater admin, assigned | 201 screen | 400 `INVALID_REQUEST`; 403; 409 `SCREEN_NAME_TAKEN` |
+| `GET /api/admin/screens/{id}` | theater admin, assigned | 200 seating plan | 403; 404 |
+| `PUT /api/admin/screens/{id}/layout` | theater admin, assigned | 200 seating plan | 400; 403; 404; 409 `SCREEN_HAS_SHOWTIMES` / `SCREEN_BUSY` |
 
 Rules for every protected endpoint:
 - No credentials or wrong credentials: 401 `UNAUTHENTICATED`.
@@ -73,6 +79,16 @@ Sorted by title.
 ```json
 [{"id":7,"title":"Coco","durationMinutes":105,"certification":"PG","releaseDate":"2017-11-22",
   "originalLanguage":{"code":"en","name":"English"},"genres":["Animation","Family","Fantasy"]}, …]
+```
+
+### `GET /api/languages`
+
+Every language a showtime may be shown in, sorted by name. Added in Task 11 so the admin form
+does not have to harvest codes from movies.
+
+```json
+[{"code":"en","name":"English"},{"code":"hi","name":"Hindi"},{"code":"ja","name":"Japanese"},
+ {"code":"ko","name":"Korean"},{"code":"es","name":"Spanish"}]
 ```
 
 ### `GET /api/showtimes`
@@ -309,3 +325,69 @@ Field rules:
 - `languageCode` is two lower-case letters.
 - `startsAtLocal` has whole minutes.
 - Prices are positive, have at most 2 decimals, and are at most 1000.
+
+### `GET /api/admin/theaters`
+
+Only the theaters assigned to the caller. Screen counts come from the physical `seat` rows.
+`layoutLocked` is true once the screen has ever had a showtime (including cancelled or past
+ones), because that showtime's inventory and tickets reference those seats.
+
+```json
+[{"theaterId":1,"name":"Starlight Cinemas Downtown","address":"1200 Elm St, Dallas, TX",
+  "city":{"id":1,"name":"Dallas","stateCode":"TX","timeZone":"America/Chicago"},
+  "screens":[{"screenId":1,"name":"Screen 1","rowCount":6,"seatCount":60,"standardSeats":40,
+              "premiumSeats":20,"layoutLocked":true},
+             {"screenId":2,"name":"Screen 2","rowCount":5,"seatCount":40,"standardSeats":24,
+              "premiumSeats":16,"layoutLocked":true}]}]
+```
+
+`admin.houston` sees Bayou Picture House, not Starlight. A customer gets 403.
+
+### `GET /api/admin/theaters/{theaterId}/showtimes`
+
+`date` is a local calendar date (`yyyy-MM-dd`) in the theater's zone. Omit it for today there.
+The year must be 2000–2100. The list includes started and cancelled showtimes. A price is
+`null` when the screen has no seats of that category. `heldSeats` counts only holds that have
+not yet expired at the injected clock.
+
+```
+GET /api/admin/theaters/1/showtimes?date=2026-11-03
+```
+```json
+{"theaterId":1,"date":"2026-11-03","timeZone":"America/Chicago","showtimes":[
+  {"showtimeId":1,"screenId":1,"screenName":"Screen 1","movieId":1,"movieTitle":"Interstellar",
+   "languageCode":"en","status":"SCHEDULED","startsAt":"2026-11-03T19:00:00Z",
+   "endsAt":"2026-11-03T22:04:00Z","localStartTime":"13:00:00","localEndTime":"16:04:00",
+   "seatCount":60,"bookedSeats":0,"heldSeats":0,"standardPrice":12.50,"premiumPrice":16.00}, …]}
+```
+
+### `POST /api/admin/theaters/{theaterId}/screens`
+
+Rows are front-first. Labels are a single `A`–`Z` letter and unique. `seatCount` is 1–40.
+`category` is `STANDARD` or `PREMIUM`. The name is trimmed and unique per theater.
+
+```json
+{"name":"Screen 3","rows":[{"rowLabel":"A","seatCount":8,"category":"STANDARD"},
+                           {"rowLabel":"B","seatCount":8,"category":"PREMIUM"}]}
+```
+
+| Situation | Response |
+|---|---|
+| Duplicate name in the same theater | 409 `SCREEN_NAME_TAKEN` |
+| Missing or invalid fields | 400 `INVALID_REQUEST` with `details.fields` |
+| Theater the admin is not assigned to | 403 `FORBIDDEN` |
+
+### `GET /api/admin/screens/{screenId}` and `PUT /api/admin/screens/{screenId}/layout`
+
+The GET lists every seat in row then number order. The PUT replaces the seats **only while the
+screen has never had a showtime**. It takes the same `screen` row lock as showtime creation, so
+a layout change cannot interleave with the first `show_seat` insert. The composite FK
+`show_seat (seat_id, screen_id) → seat` is the database backstop: a referenced seat cannot be
+deleted.
+
+| Situation | Response |
+|---|---|
+| Any showtime already exists for the screen | 409 `SCREEN_HAS_SHOWTIMES` |
+| Another scheduling change holds the screen lock past `lock_timeout` | 409 `SCREEN_BUSY` |
+| Unknown screen | 404 |
+| Screen of a theater the admin is not assigned to | 403 |

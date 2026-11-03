@@ -129,7 +129,7 @@
 | 3.4 Pay and confirm | Complete | Success, decline with retry, timeout with polling, late-capture void, at most 3 attempts |
 | 3.5 Abandonment and release | Complete | Lazy expiry; release blocked while a payment is in flight |
 | 3.6 View my bookings | Complete (Task 10) | `GET /api/bookings` (own confirmed bookings, newest first, paginated) and the My Tickets screen at `/tickets`. `BookingHistoryApiIT`, `history.test.ts`, `my-tickets.spec.ts`. |
-| 3.7 Admin creates showtimes (API only) | Complete | `POST /api/admin/showtimes`. There is no admin UI and no cancellation (stretch items). |
+| 3.7 Admin theaters, screens and showtimes | Complete (Task 11) | Assigned-theater APIs, screen add / layout replace-before-first-showtime, `/admin` dashboard. `AdminTheaterApiIT`, `forms.test.ts`, `admin.spec.ts`. Showtime cancellation is still not implemented. |
 
 ## 9. Required documentation (`docs/implementation-plan.md` Phase 7)
 
@@ -172,9 +172,22 @@
 
 A clean `docker compose down -v` start was not run for Task 10, to keep the local database.
 
+**Task 11 (2026-11-03, same Mac, existing Compose stack and database kept):**
+
+| Check | Result |
+|---|---|
+| Backend: `./mvnw -B clean verify` (JDK 23) | 64/64 unit tests, 158/158 integration tests, BUILD SUCCESS |
+| Frontend: `npm test`; `npm run typecheck` | 50/50 pass; typecheck succeeds |
+| Layout-lock mutation | Race test failed 3/3 without the screen lock |
+| Stack rebuilt in place: `docker compose up -d --build` (no `down -v`) | All three services healthy; booking `9956RB4M` still present (33 confirmed bookings) |
+| Playwright against the running stack | 8/8, then 24/24 with `--repeat-each=3` |
+| Single runner: `./run-tests.sh` against the running stack | Exit 0: backend 64/64 unit and 158/158 integration, frontend 50/50, Playwright 8/8, no skipped tests |
+
+A clean `docker compose down -v` start was not run for Task 11, to keep the local database.
+
 ## 11. Remaining gaps (honest summary)
 
-- Not implemented: `GET /holds/{id}`, admin UI, showtime cancellation,
+- Not implemented: `GET /holds/{id}`, showtime cancellation,
   background workers (outbox relay, cleanup, scheduled reconciliation).
 - E2E tests do not cover timeout/`UNKNOWN` polling, hold expiry, keyboard-only use or mobile
   viewports; these are covered at the API or unit level, or not at all (`docs/test-strategy.md`).

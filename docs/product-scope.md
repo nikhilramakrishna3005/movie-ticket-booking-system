@@ -82,12 +82,15 @@ for how the design accounts for this and what is out of reach for this assessmen
    (Originally on the cut list; delivered in Task 10 as `GET /api/bookings` and the My Tickets
    screen.)
 
-### 3.7 Theater Admin: create showtimes (API only)
-1. An admin creates a showtime (movie, screen, start time, language, prices) **only for a
+### 3.7 Theater Admin: theaters, screens and showtimes
+1. An admin sees only the theaters they are assigned to, with each screen's seating plan and
+   a day's showtimes (prices and booked/held counts).
+2. An admin creates a showtime (movie, screen, start time, language, prices) **only for a
    theater they are assigned to**. The seat inventory is generated from the screen layout.
-2. Overlapping showtimes on the same screen are rejected.
-3. No admin UI in the MVP: the endpoint is exercised by integration tests and documented in the
-   API reference. An admin UI and showtime cancellation are stretch items on the cut list.
+3. Overlapping showtimes on the same screen are rejected.
+4. An admin may add a screen, and may replace a screen's layout only while it has never had a
+   showtime (existing bookings and inventory keep their seats).
+5. The admin dashboard is at `/admin`. Showtime cancellation remains a stretch item.
 
 ## 4. Explicit non-goals
 
@@ -96,7 +99,7 @@ for how the design accounts for this and what is out of reach for this assessmen
 - Real email/SMS/push delivery. Booking events are recorded in an outbox; delivering them is a
   stretch item.
 - Customer cancellations or refunds after a booking is confirmed.
-- Admin UI; editing screens and seat layouts; platform-admin role; catalog management UI.
+- Showtime cancellation; platform-admin role; catalog management UI.
 - Dynamic pricing, coupons, loyalty, food & beverage, gift cards, taxes, multi-currency, i18n.
 - Recommendations, reviews, trailers.
 - Background workers (hold-cleanup sweeper, outbox relay, scheduled payment reconciliation).
@@ -207,10 +210,11 @@ Each criterion should map to at least one automated test once implemented (see
   local times shown for a showtime, and an admin's entered start time are in the theater's city
   time zone (`city.time_zone`; all sample cities use `America/Chicago`).
 
-## 8. Delivery status (final audit, 2026-11-02; updated for Task 10, 2026-11-03)
+## 8. Delivery status (final audit, 2026-11-02; updated for Tasks 10–11, 2026-11-03)
 
 **Delivered and covered by automated tests:**
-- Workflows 3.1–3.7 (3.6, "view my bookings", was added in Task 10).
+- Workflows 3.1–3.7 (3.6, "view my bookings", was added in Task 10; 3.7 gained the admin
+  dashboard, screen management and schedule views in Task 11).
 - Every acceptance criterion in §5 except part of AC-H10: there is no "view a hold" endpoint.
 - Failure cases F1–F7 and F9–F14.
 - F8 (a crash between charge and confirmation) is handled by on-demand resolution of a stale
@@ -222,7 +226,7 @@ Each criterion should map to at least one automated test once implemented (see
 | Feature | Why / where recorded |
 |---|---|
 | `GET /holds/{id}` | Not needed by the React flow, which keeps checkout state in memory |
-| Admin UI and showtime cancellation | Cut list items 1 and 3; showtimes are created through the API |
+| Showtime cancellation | Cut list item 3; showtimes can be created, not cancelled |
 | Background workers: hold-cleanup sweeper, outbox relay, scheduled payment reconciliation | Cut list item 2; correctness relies on lazy expiry and on-demand resolution instead |
 | Redis, Kafka, Solr | ADRs 0001–0003 |
 | Load testing to the 500,000-visitor target | Non-goal; design notes only (`docs/architecture.md` §12) |

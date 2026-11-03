@@ -1,18 +1,18 @@
 # Test Strategy
 
 > **Status: IMPLEMENTED.** This document describes the tests that exist in the repository and what
-> each suite proves. The counts are from the Task 10 run on 2026-11-03 (see
-> [Task 10 verification](#task-10-verification-2026-11-03)). The final audit of 2026-11-02 is kept
-> below it.
+> each suite proves. The counts are from the Task 11 run on 2026-11-03 (see
+> [Task 11 verification](#task-11-verification-2026-11-03)). Earlier Task 10 and final-audit
+> runs are kept below it.
 
 ## Test levels
 
 | Level | Tool | Location | Count | Command |
 |---|---|---|---|---|
 | Backend unit | JUnit 5 (Surefire) | `backend/src/test/java/**/*Test.java` | 64 | `cd backend && ./mvnw -B clean verify` |
-| Backend integration and concurrency | JUnit 5, Spring Boot, Testcontainers PostgreSQL 16 (Failsafe) | `backend/src/test/java/**/*IT.java` | 142 | (same command) |
-| Frontend unit | Node built-in test runner | `frontend/src/**/*.test.ts` | 40 | `cd frontend && npm test` |
-| End-to-end | Playwright, Chromium | `frontend/e2e/*.spec.ts` | 6 | `cd frontend && npm run test:e2e` (needs the Compose stack running) |
+| Backend integration and concurrency | JUnit 5, Spring Boot, Testcontainers PostgreSQL 16 (Failsafe) | `backend/src/test/java/**/*IT.java` | 158 | (same command) |
+| Frontend unit | Node built-in test runner | `frontend/src/**/*.test.ts` | 50 | `cd frontend && npm test` |
+| End-to-end | Playwright, Chromium | `frontend/e2e/*.spec.ts` | 8 | `cd frontend && npm run test:e2e` (needs the Compose stack running) |
 
 These counts are executed test cases, including parameterized and repeated cases, as reported
 by Surefire, Failsafe, Node and Playwright.
@@ -43,7 +43,7 @@ neither environment settings nor a stray `.only` can narrow the run.
 
 | Class | Proves |
 |---|---|
-| `ApplicationContextWithoutDatabaseTest` (28) | The security filter chain without a database: 401 with or without a Basic challenge, wrong password or unknown user, role checks (customer vs admin), anonymous browsing paths, non-API paths denied, no CORS headers granted, error format for unknown paths, UTC clock bean. |
+| `ApplicationContextWithoutDatabaseTest` (28) | The security filter chain without a database: 401 with or without a Basic challenge, wrong password or unknown user, role checks (customer vs admin), anonymous browsing paths including `/api/languages`, non-API paths denied, no CORS headers granted, error format for unknown paths, UTC clock bean. `TheaterRepository` is mocked so the context loads without a DataSource. |
 | `HoldRulesTest` (4) | Hold and seat expiry at the exact expiry instant; only active holds can be released or expired. |
 | `PaymentAttemptRulesTest` (4) | The attempt state machine: `PENDING` reaches every outcome; `UNKNOWN` stays in flight; terminal states never change. |
 | `ShowtimeSearchTest` (5) | Search defaults, page-size cap, invalid paging rejected with the parameter name, text trimming. |
@@ -52,7 +52,7 @@ neither environment settings nor a stray `.only` can narrow the run.
 | `ClockConfigTest` (1) | The application clock is UTC. |
 | `BookingPageRequestTest` (5) | Booking-history paging: defaults to page 0 of 10; an oversized size is capped at 50, not rejected; page 0–1000 and size 1 are accepted; a negative or too-deep page and a size below 1 are rejected with the parameter name. |
 
-## Backend integration tests on Testcontainers (142)
+## Backend integration tests on Testcontainers (158)
 
 | Class | Proves | Acceptance criteria |
 |---|---|---|
@@ -64,11 +64,12 @@ neither environment settings nor a stray `.only` can narrow the run.
 | `SimulatedProviderFenceIT` (4) | The ledger fence used for stale `PENDING` resolution: a charge queued behind a fence is refused, and a fence behind a capture reports the capture. | AC-B6, architecture §6.7 |
 | `DiscoveryApiIT` (25) | City and local-date filtering, combined filters, typo tolerance, pagination without gaps, page cap, local date vs UTC date, DST, default "today" per city, started or cancelled shows not listed, showtime detail, anonymous browsing allowed but holds, payments and bookings protected. | AC-S1–S5, AC-U1 |
 | `AdminShowtimeApiIT` (11) | An assigned admin creates a showtime with full seat inventory, which is then searchable and holdable. Other theaters give 403. Overlaps give 409, back-to-back is allowed. Concurrent overlapping creates produce exactly one showtime. The screen lock wait is bounded (`SCREEN_BUSY`). Invalid requests list the fields. | AC-U2, U4 |
+| `AdminTheaterApiIT` (16) | An admin sees only assigned theaters. 401/403 for missing credentials or the customer role. Dallas cannot read or change Houston. Unknown screens are 404; unassigned theater ids are 403. The schedule lists local-day showtimes with prices and booked/held counts (held drop after expiry); started and cancelled shows are included; the local day follows DST. Invalid dates are 400. A new screen can be scheduled, after which its layout is locked. A layout can be replaced only before the first showtime. Invalid screens list the offending fields; duplicate names are 409 `SCREEN_NAME_TAKEN`. Concurrent same-name screens produce exactly one. Concurrent non-overlapping showtimes on one screen all succeed. A layout change racing the first showtime never leaves inventory out of step with the seats. Languages are public and sorted by name. | Product scope §3.7, AC-U2, U4 |
 | `SecurityIT` (10) | 401 for missing or wrong credentials. Customers are forbidden from admin endpoints. An authenticated unknown path gives 404, not 401. An admin principal carries only its seeded assignment. A customer can't reach another customer's resource. | AC-U1, U3 |
 | `BookingHistoryApiIT` (9) | `GET /api/bookings`: 401 without or with wrong credentials, 403 for a theater admin, an empty page for a customer with no bookings. A booking is listed with its reference, movie, theater, screen, city, local date and time in the theater's zone, seats and total. Alice never sees Bob's bookings, even with `?customerId=` in the query, and Bob still gets 404 for Alice's `GET /api/bookings/{id}`. Newest first across pages, with no gaps or repeats and an empty page past the end. Bookings made at the same clock instant are ordered by id, so pages stay stable. Declined and unpaid holds are not listed. `page` and `size` are bounded (400 with the parameter name; size capped at 50). Bookings are made through the real hold and payment endpoints, with the `MutableClock` setting their times. | Product scope §3.6, AC-U1 |
 | `ApplicationIT` (2) | The application connects to PostgreSQL and health is `UP` with the database. | — |
 
-## Frontend unit tests (40)
+## Frontend unit tests (50)
 
 | File | Proves |
 |---|---|
@@ -78,8 +79,9 @@ neither environment settings nor a stray `.only` can narrow the run.
 | `src/features/seats/selection.test.ts` (3) | Seats that became held or booked are dropped from the selection; exact price totals. |
 | `src/features/discovery/showtimes.test.ts` (4) | Grouping and ordering of search results; reading every page. |
 | `src/lib/lib.test.ts` (9) | Dates in the theater zone, DST arithmetic, countdown skew correction, formatting (including the ticket date), UUID generation. |
+| `src/features/admin/forms.test.ts` (10) | Showtime and screen drafts: missing fields, date/time/price bounds matching the server, premium rows at the back, name not required when replacing a layout, overlap/busy/taken-name/locked-layout messages, `INVALID_REQUEST` field labels. |
 
-## End-to-end tests (6)
+## End-to-end tests (8)
 
 Playwright drives Chromium against the real Compose stack (nginx, Spring Boot, PostgreSQL). Each
 test creates its own showtime through `POST /api/admin/showtimes`, so tests are independent and
@@ -93,6 +95,8 @@ can run in parallel without a database reset. Selectors are `data-testid` only.
 | `search-navigation.spec.ts`: a showtime opened while the search debounce is pending stays open, and Back returns to Discover | Regression for the Task 10 race (below). The seat map stays open after the debounce fires; Back returns to Discover with the city and date; Forward returns to the seats. | Search §3.1 |
 | `search-navigation.spec.ts`: a search typed on Discover still filters the results and is kept in the history entry | The misspelled "Intersteller" filters to one movie, and after opening a showtime, Back restores `q` in the URL and in the search box. | AC-S3 (through the UI) |
 | `my-tickets.spec.ts`: a successful booking appears in My Tickets, opens its ticket, and the list is gone after reload or sign-out | Alice books two premium seats in the UI, opens My Tickets from the header and finds the card with the reference, movie, local date and time, theater, seats, total and "Upcoming". The cards are in the API's newest-first order. The card opens the existing ticket page. Local and session storage and cookies are empty. After a reload she is signed out and sees no tickets; signed in as Bob, Alice's booking is absent; after sign-out, `/tickets` asks to sign in. | Product scope §3.6 |
+| `admin.spec.ts`: a customer cannot open theater administration | Alice signing in at `/admin` sees the not-admin state; the header still has My Tickets, not Admin. | Product scope §3.7, AC-U2 |
+| `admin.spec.ts`: an admin schedules a showtime that then appears in public discovery | Dallas admin signs in at `/admin`, sees Starlight, schedules Parasite on Screen 1 in a far-future slot (retrying on overlap), sees it on the day's list, signs out, and finds the same showtime on Discover. No screen is created, so the owner's dashboard is not given extra screens. | Product scope §3.7 |
 
 ### The search race regression
 
@@ -138,6 +142,25 @@ debounce, the search filters and Back/Forward are unchanged.
 - **Package boundaries.** These are enforced by review only (no ArchUnit).
 - **Crash recovery.** This is tested by simulating states, e.g. a stale `PENDING` attempt, not by
   killing the process.
+
+## Task 11 verification (2026-11-03)
+
+Run on a Mac (macOS 26, Docker Desktop) on branch `feature/task-11-theater-admin`.
+The backend was built with JDK 23 (the build targets Java 21). The existing Compose stack and
+its database were kept: the stack was rebuilt in place, not reset. No new Flyway migration.
+
+| Command | Result |
+|---|---|
+| `cd backend && ./mvnw -B clean verify` | Unit tests: 64 run, 0 failures, 0 errors, 0 skipped. Integration tests: 158 run, 0 failures, 0 errors, 0 skipped. BUILD SUCCESS |
+| `cd frontend && npm test` | 50 tests, 50 pass, 0 fail |
+| `cd frontend && npm run typecheck` | Succeeds |
+| Mutation: `replaceLayout` without the screen lock | `AdminTheaterApiIT.aLayoutChangeRacingTheFirstShowtimeNeverLeavesInventoryOutOfStep` failed 3/3 (`CannotAcquireLockException` on `show_seat` insert) |
+| `docker compose up -d --build` | postgres, backend and frontend healthy; no new Flyway version; booking `9956RB4M` and the other 32 confirmed bookings still present |
+| `cd frontend && npx playwright test` | 8 passed |
+| `cd frontend && npx playwright test --repeat-each=3` | 24 passed |
+| `./run-tests.sh` (all suites, stack running) | Exit 0. Backend 64 unit and 158 integration (0 failures, 0 errors, 0 skipped), frontend 50/50 (0 skipped), Playwright 8 passed |
+
+A clean `docker compose down -v` start was not run for Task 11, to keep the owner's database.
 
 ## Task 10 verification (2026-11-03)
 
