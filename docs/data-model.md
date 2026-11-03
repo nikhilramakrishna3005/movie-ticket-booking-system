@@ -1,7 +1,7 @@
 # Data Model
 
 > **Status: IMPLEMENTED.** This document describes the schema created by the committed Flyway
-> migrations `V1`–`V11` in `backend/src/main/resources/db/migration/`. It was written from those
+> migrations `V1`–`V13` in `backend/src/main/resources/db/migration/`. It was written from those
 > files; if they disagree, the migrations are authoritative. Hibernate runs with
 > `ddl-auto: validate`, so the JPA entities must match this schema at startup.
 
@@ -19,6 +19,7 @@
 | `V10__booking_history_index.sql` | `booking_customer_history_idx (customer_id, created_at DESC, id DESC)` for `GET /api/bookings`; drops `booking_customer_idx`, which was its prefix |
 | `V11__e2e_test_users.sql` | Playwright-only customers `e2e.alice` and `e2e.bob` (BCrypt hashes); Alice and Bob are unchanged |
 | `V12__outbox_relay_and_notification_inbox.sql` | Outbox claim/retry columns (`claimed_until`, `next_attempt_at`, `attempt_count`, `last_error`); `notification_inbox` keyed by `event_id` |
+| `V13__outbox_claim_token.sql` | `outbox_event.claim_token` so ack and failure apply only while that claim still owns the row |
 
 ## Entity-relationship diagram
 
@@ -178,6 +179,7 @@ erDiagram
         timestamptz next_attempt_at
         integer attempt_count
         text last_error
+        uuid claim_token "NULL when idle or after ack"
     }
     NOTIFICATION_INBOX {
         uuid id PK
@@ -238,8 +240,9 @@ measured at scale.
 ## Tables that exist but are not fully used
 
 - `outbox_event`: a `BookingConfirmed` row is written in the booking transaction. The in-process
-  dispatcher claims unpublished due rows (`FOR UPDATE SKIP LOCKED`), the inbox consumer inserts
-  `notification_inbox` by `event_id`, then `published_at` is set. Kafka is not used (ADR 0002).
+  dispatcher claims unpublished due rows (`FOR UPDATE SKIP LOCKED` plus a per-claim `claim_token`),
+  the inbox consumer inserts with `ON CONFLICT (event_id) DO NOTHING`, then `published_at` is set
+  only if that token still matches. Kafka is not used (ADR 0002).
 - `showtime.status = 'CANCELLED'`: set by `POST /api/admin/showtimes/{id}/cancel` when the show
   has no bookings, no unresolved payments and no live holds. Search, holds and confirmation
   already honoured the status. Inventory and historical rows are never deleted.

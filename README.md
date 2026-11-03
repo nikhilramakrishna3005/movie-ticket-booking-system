@@ -143,9 +143,10 @@ or `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
 - Cancellation refuses while a simulated payment is `PENDING` or `UNKNOWN`. If that attempt then
   captures, the show has bookings and cannot be cancelled; Cinéva does not void or refund it.
 - Outbox delivery is at-least-once inside this process. A crash between inbox insert and
-  `published_at` is retried; the unique event id prevents a duplicate row. There is no claim of
-  exactly-once network or email delivery. After eight failed claims an event stays unpublished
-  with `last_error` for inspection.
+  `published_at` is retried; `ON CONFLICT (event_id) DO NOTHING` prevents a duplicate row. A
+  worker whose 30 s claim lease expired cannot ack or fail a row another worker has reclaimed
+  (`claim_token`). There is no claim of exactly-once network or email delivery. After eight
+  failed claims an event stays unpublished with `last_error` for inspection.
 
 The full status is in [`docs/requirements-checklist.md`](docs/requirements-checklist.md).
 
@@ -190,7 +191,7 @@ cd frontend && npm ci && npx playwright install --with-deps chromium && npm run 
 
 What each suite proves, and the latest results, are in
 [`docs/test-strategy.md`](docs/test-strategy.md). The latest results were 66 backend unit tests,
-184 integration tests, 53 frontend unit tests and 9 Playwright tests, all passing, on
+186 integration tests, 53 frontend unit tests and 9 Playwright tests, all passing, on
 2026-11-03.
 
 ## Repository structure
@@ -199,7 +200,7 @@ What each suite proves, and the latest results, are in
 backend/                 Spring Boot application (Maven wrapper, Dockerfile)
   src/main/java/com/moviebooking/
     catalog/ theater/ booking/ payment/ admin/ security/ config/
-  src/main/resources/db/migration/   Flyway V1–V12 (schema, sample data, demo and Playwright users, outbox relay)
+  src/main/resources/db/migration/   Flyway V1–V13 (schema, sample data, demo and Playwright users, outbox relay)
   src/test/java/         JUnit unit tests (*Test) and Testcontainers integration tests (*IT)
 frontend/                React + TypeScript + Vite app, nginx config, Dockerfile
   src/                   pages, components, features, API client, unit tests (*.test.ts)

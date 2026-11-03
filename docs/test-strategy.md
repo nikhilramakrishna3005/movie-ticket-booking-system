@@ -1,8 +1,8 @@
 # Test Strategy
 
 > **Status: IMPLEMENTED.** This document describes the tests that exist in the repository and what
-> each suite proves. The counts are from the Task 13 run on 2026-11-03 (see
-> [Task 13 verification](#task-13-verification-2026-11-03)). Earlier Task 12, Task 11, Task 10 and final-audit
+> each suite proves. The counts are from the Task 13 review-fix run on 2026-11-03 (see
+> [Task 13 review fixes](#task-13-review-fixes-2026-11-03)). Earlier Task 13, Task 12, Task 11, Task 10 and final-audit
 > runs are kept below it.
 
 ## Test levels
@@ -10,7 +10,7 @@
 | Level | Tool | Location | Count | Command |
 |---|---|---|---|---|
 | Backend unit | JUnit 5 (Surefire) | `backend/src/test/java/**/*Test.java` | 66 | `cd backend && ./mvnw -B clean verify` |
-| Backend integration and concurrency | JUnit 5, Spring Boot, Testcontainers PostgreSQL 16 (Failsafe) | `backend/src/test/java/**/*IT.java` | 184 | (same command) |
+| Backend integration and concurrency | JUnit 5, Spring Boot, Testcontainers PostgreSQL 16 (Failsafe) | `backend/src/test/java/**/*IT.java` | 186 | (same command) |
 | Frontend unit | Node built-in test runner | `frontend/src/**/*.test.ts` | 53 | `cd frontend && npm test` |
 | End-to-end | Playwright, Chromium | `frontend/e2e/*.spec.ts` | 9 | `cd frontend && npm run test:e2e` (needs the Compose stack running) |
 
@@ -53,11 +53,11 @@ neither environment settings nor a stray `.only` can narrow the run.
 | `BookingPageRequestTest` (5) | Booking-history paging: defaults to page 0 of 10; an oversized size is capped at 50, not rejected; page 0–1000 and size 1 are accepted; a negative or too-deep page and a size below 1 are rejected with the parameter name. |
 | `OutboxBackoffTest` (2) | First retry waits the initial delay; later attempts double until the cap. |
 
-## Backend integration tests on Testcontainers (184)
+## Backend integration tests on Testcontainers (186)
 
 | Class | Proves | Acceptance criteria |
 |---|---|---|
-| `DatabaseSchemaIT` (35) | All migrations apply in order (V1–V12). The booking-history index is `(customer_id, created_at DESC, id DESC)` and the redundant old index is gone. The outbox due index and inbox history index exist. Duplicate inbox `event_id` is rejected. Every constraint in `docs/data-model.md` rejects the invalid row it guards, e.g. a seat booked twice, two active holds, two in-flight attempts, a reasonless decline, overlapping showtimes, and a booking for another customer's hold. Sample data shape and window. | AC-B8, AC-H8 backstop, AC-U4 backstop |
+| `DatabaseSchemaIT` (35) | All migrations apply in order (V1–V13). The booking-history index is `(customer_id, created_at DESC, id DESC)` and the redundant old index is gone. The outbox due index and inbox history index exist. Duplicate inbox `event_id` is rejected. `claim_token` exists on `outbox_event`. Every constraint in `docs/data-model.md` rejects the invalid row it guards, e.g. a seat booked twice, two active holds, two in-flight attempts, a reasonless decline, overlapping showtimes, and a booking for another customer's hold. Sample data shape and window. | AC-B8, AC-H8 backstop, AC-U4 backstop |
 | `HoldApiIT` (26) | Hold creation, validation (empty, over 10, duplicate, unknown or other-screen seats), all-or-nothing conflicts, lazy expiry exactly at `expires_at`, one active hold per showtime with expired-hold replacement, release (idempotent, owner-only, 404 for others), closed showtimes. `GET /holds/{id}`: owner sees current state without extending expiry; lazy EXPIRED is reported without writing; released and converted statuses; another customer gets 404. | AC-H1, H2, H6–H10 |
 | `ShowtimeCancellationIT` (10) | Assigned-admin cancel; 401/403/404; Houston cannot cancel Dallas; empty show cancelled without deleting inventory; idempotent re-cancel; expired holds are swept; live holds, bookings and in-flight payments 409 with rows unchanged and no void; concurrent cancels leave one CANCELLED row; a hold racing cancel yields either a scheduled show with a hold or a cancelled show with none; a payment racing cancel never cancels a sold show and never voids a capture. | Product scope §3.7, architecture §5.1 |
 | `HoldConcurrencyIT` (5) | Many customers racing for one seat leave exactly one holder. Overlapping multi-seat requests never deadlock or partially succeed. The same customer racing two holds gets one. The lock wait is bounded and reported as `SEATS_BUSY` with nothing held. | AC-H3, H4, H5 |
@@ -69,7 +69,7 @@ neither environment settings nor a stray `.only` can narrow the run.
 | `AdminTheaterApiIT` (16) | An admin sees only assigned theaters. 401/403 for missing credentials or the customer role. Dallas cannot read or change Houston. Unknown screens are 404; unassigned theater ids are 403. The schedule lists local-day showtimes with prices and booked/held counts (held drop after expiry); started and cancelled shows are included; the local day follows DST. Invalid dates are 400. A new screen can be scheduled, after which its layout is locked. A layout can be replaced only before the first showtime. Invalid screens list the offending fields; duplicate names are 409 `SCREEN_NAME_TAKEN`. Concurrent same-name screens produce exactly one. Concurrent non-overlapping showtimes on one screen all succeed. A layout change racing the first showtime never leaves inventory out of step with the seats. Languages are public and sorted by name. | Product scope §3.7, AC-U2, U4 |
 | `SecurityIT` (12) | 401 for missing or wrong credentials. Customers are forbidden from admin endpoints. An authenticated unknown path gives 404, not 401. An admin principal carries only its seeded assignment. A customer can't reach another customer's resource. Demo and Playwright accounts (`alice`, `bob`, `e2e.alice`, `e2e.bob`, both admins) authenticate with their documented role. | AC-U1, U3 |
 | `BookingHistoryApiIT` (9) | `GET /api/bookings`: 401 without or with wrong credentials, 403 for a theater admin, an empty page for a customer with no bookings. A booking is listed with its reference, movie, theater, screen, city, local date and time in the theater's zone, seats and total. Alice never sees Bob's bookings, even with `?customerId=` in the query, and Bob still gets 404 for Alice's `GET /api/bookings/{id}`. Newest first across pages, with no gaps or repeats and an empty page past the end. Bookings made at the same clock instant are ordered by id, so pages stay stable. Declined and unpaid holds are not listed. `page` and `size` are bounded (400 with the parameter name; size capped at 50). Bookings are made through the real hold and payment endpoints, with the `MutableClock` setting their times. | Product scope §3.6, AC-U1 |
-| `OutboxDeliveryIT` (8) | A confirmed booking writes an unpublished event; dispatch creates one inbox row and sets `published_at`. Re-dispatch does not duplicate. Crash after inbox write recovers without a second row. An interrupted claim is skipped until the lease expires, then delivers. A simulated consumer failure records `last_error` and retries after backoff. Two concurrent workers deliver six events once each. Decline creates neither event nor inbox. `GET /notifications` is 401/403 and Bob's list is empty while Alice sees her row. | architecture §9 |
+| `OutboxDeliveryIT` (10) | A confirmed booking writes an unpublished event; dispatch creates one inbox row and sets `published_at`. Re-dispatch does not duplicate. Crash after inbox write recovers without a second row. An interrupted claim is skipped until the lease expires, then delivers. A simulated consumer failure records `last_error` and retries after backoff. Two concurrent workers deliver six events once each. Two concurrent inbox inserts for one event commit one row (`ON CONFLICT`). After B reclaims, A's late ack and failure leave B's token in place and B can finish delivery. Decline creates neither event nor inbox. `GET /notifications` is 401/403 and Bob's list is empty while Alice sees her row. | architecture §9 |
 | `ApplicationIT` (2) | The application connects to PostgreSQL and health is `UP` with the database. | — |
 
 ## Frontend unit tests (53)
@@ -145,8 +145,23 @@ debounce, the search filters and Back/Forward are unchanged.
   backend tests and frontend unit tests.
 - **Package boundaries.** These are enforced by review only (no ArchUnit).
 - **Crash recovery.** This is tested by simulating states, e.g. a stale `PENDING` attempt, not by
-  killing the process. Outbox interruption is simulated by setting `claimed_until` and by
-  inserting an inbox row before `published_at` (`OutboxDeliveryIT`).
+  killing the process. Outbox interruption is simulated by setting `claimed_until`, by inserting
+  an inbox row before `published_at`, and by a stale `claim_token` ack after another worker
+  reclaims the row (`OutboxDeliveryIT`).
+
+## Task 13 review fixes (2026-11-03)
+
+Run on the same Mac and branch after fencing `claim_token` (Flyway V13) and replacing the inbox
+write with `INSERT … ON CONFLICT (event_id) DO NOTHING`. Compose was rebuilt in place (no volume
+reset).
+
+| Command | Result |
+|---|---|
+| `cd backend && ./mvnw -B clean verify` | Unit tests: 66 run, 0 failures, 0 errors, 0 skipped. Integration tests: 186 run, 0 failures, 0 errors, 0 skipped. BUILD SUCCESS |
+| `cd frontend && npm test` | 53 tests, 53 pass, 0 fail |
+| `cd frontend && npm run build` | Type-check and Vite build succeed |
+| `docker compose up -d --build --wait` | postgres stayed Running; backend Recreated; all three Healthy; Flyway at V13; booking `9956RB4M` still `CONFIRMED` |
+| `./run-tests.sh` (all suites, stack running) | Exit 0. Backend 66 unit and 186 integration (0 failures, 0 errors, 0 skipped), frontend 53/53 (0 skipped), Playwright 9 passed |
 
 ## Task 13 verification (2026-11-03)
 
