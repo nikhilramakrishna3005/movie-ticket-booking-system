@@ -57,6 +57,10 @@ public class ShowSeat {
         return price;
     }
 
+    public UUID getBookingId() {
+        return bookingId;
+    }
+
     /**
      * Status as customers see it at {@code now}: a hold whose expiry has passed counts as
      * available even though the row still says HELD (lazy expiry, no cleanup job).

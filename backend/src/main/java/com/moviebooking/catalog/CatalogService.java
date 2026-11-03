@@ -2,8 +2,11 @@ package com.moviebooking.catalog;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +37,11 @@ public class CatalogService {
 
     public Optional<Movie> findMovie(long movieId) {
         return movies.findById(movieId);
+    }
+
+    /** Titles keyed by movie id; unknown ids are absent. */
+    public Map<Long, String> getMovieTitles(Collection<Long> movieIds) {
+        return movies.findAllById(movieIds).stream().collect(Collectors.toMap(Movie::getId, Movie::getTitle));
     }
 
     public boolean languageExists(String code) {

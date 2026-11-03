@@ -8,9 +8,12 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.beans.factory.annotation.Value;
@@ -71,16 +74,38 @@ public class TheaterService {
     }
 
     public ShowtimeDetails getShowtimeDetails(long showtimeId) {
-        Showtime showtime = getShowtime(showtimeId);
-        ShowtimeRepository.VenueNames venue = showtimes.findVenueNames(showtimeId)
-                .orElseThrow(ResourceNotFoundException::new);
-        return new ShowtimeDetails(showtimeId, showtime.getMovieId(), showtime.getScreenId(), showtime.getStartsAt(),
-                venue.getTheaterName(), venue.getScreenName(), venue.getCityName() + ", " + venue.getStateCode());
+        ShowtimeDetails details = getShowtimeDetails(List.of(showtimeId)).get(showtimeId);
+        if (details == null) {
+            throw new ResourceNotFoundException();
+        }
+        return details;
+    }
+
+    /** Details keyed by showtime id, in two queries however many ids are given; unknown ids are absent. */
+    public Map<Long, ShowtimeDetails> getShowtimeDetails(Collection<Long> showtimeIds) {
+        if (showtimeIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, ShowtimeRepository.VenueNames> venues = showtimes.findVenueNames(showtimeIds).stream()
+                .collect(Collectors.toMap(ShowtimeRepository.VenueNames::getShowtimeId, Function.identity()));
+        return showtimes.findAllById(showtimeIds).stream()
+                .filter(showtime -> venues.containsKey(showtime.getId()))
+                .collect(Collectors.toMap(Showtime::getId, showtime -> {
+                    ShowtimeRepository.VenueNames venue = venues.get(showtime.getId());
+                    return new ShowtimeDetails(showtime.getId(), showtime.getMovieId(), showtime.getScreenId(),
+                            showtime.getStartsAt(), venue.getTheaterName(), venue.getScreenName(),
+                            venue.getCityName() + ", " + venue.getStateCode(), ZoneId.of(venue.getTimeZone()));
+                }));
     }
 
     /** Seats of a screen in display order (row, then seat number). */
     public List<Seat> getSeats(long screenId) {
         return seats.findByScreenIdOrderByRowLabelAscSeatNumberAsc(screenId);
+    }
+
+    /** Seats keyed by id; unknown ids are absent. */
+    public Map<Long, Seat> getSeatsById(Collection<Long> seatIds) {
+        return seats.findAllById(seatIds).stream().collect(Collectors.toMap(Seat::getId, Function.identity()));
     }
 
     /**

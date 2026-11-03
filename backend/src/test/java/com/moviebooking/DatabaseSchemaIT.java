@@ -46,7 +46,7 @@ class DatabaseSchemaIT {
         var versions = jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class);
 
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10");
     }
 
     @Test
@@ -97,6 +97,15 @@ class DatabaseSchemaIT {
         assertThat(titles).contains("Interstellar");
         assertThat(count("SELECT count(*) FROM pg_indexes WHERE indexname IN "
                 + "('movie_title_trgm_idx', 'theater_name_trgm_idx')")).isEqualTo(2);
+    }
+
+    @Test
+    void bookingHistoryIsIndexedByCustomerNewestFirst() {
+        String definition = jdbc.queryForObject(
+                "SELECT indexdef FROM pg_indexes WHERE indexname = 'booking_customer_history_idx'", String.class);
+
+        assertThat(definition).contains("(customer_id, created_at DESC, id DESC)");
+        assertThat(count("SELECT count(*) FROM pg_indexes WHERE indexname = 'booking_customer_idx'")).isZero();
     }
 
     @Test

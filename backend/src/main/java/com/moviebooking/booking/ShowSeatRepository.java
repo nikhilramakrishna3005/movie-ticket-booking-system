@@ -21,6 +21,8 @@ public interface ShowSeatRepository extends JpaRepository<ShowSeat, ShowSeat.Key
 
     List<ShowSeat> findByBookingIdOrderBySeatId(UUID bookingId);
 
+    List<ShowSeat> findByBookingIdInOrderBySeatId(Collection<UUID> bookingIds);
+
     @Query(value = """
             SELECT * FROM show_seat
             WHERE showtime_id = :showtimeId AND seat_id IN (:seatIds)
