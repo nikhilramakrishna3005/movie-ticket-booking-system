@@ -1,8 +1,10 @@
 # Implementation Plan
 
-> **Status: PLAN ONLY.** No implementation phase has started. Phase 0 (planning documents) is
-> in review on PR #1. A phase is marked complete only after its verification checkpoint has
-> actually been run and the commands and results are recorded in the task report.
+> **Status: HISTORICAL PLAN.** This is the plan as approved on PR #1, kept unchanged below as a
+> record. The phases were later implemented and merged through PRs #2–#4 and #6–#13; the current
+> state and its verification are in `docs/requirements-checklist.md` and `docs/test-strategy.md`.
+> A phase counted as complete only after its verification checkpoint had actually been run and
+> the commands and results were recorded in the task report.
 >
 > Revision 2 reorders the plan per the engineering owner's review of PR #1. The new order puts
 > Docker Compose clean-start verification, real-PostgreSQL integration tests, concurrency

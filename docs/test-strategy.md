@@ -1,9 +1,9 @@
 # Test Strategy
 
 > **Status: IMPLEMENTED.** This document describes the tests that exist in the repository and what
-> each suite proves. The counts are from the Task 13 review-fix run on 2026-11-03 (see
-> [Task 13 review fixes](#task-13-review-fixes-2026-11-03)). Earlier Task 13, Task 12, Task 11, Task 10 and final-audit
-> runs are kept below it.
+> each suite proves. The counts are from the Task 14 final-audit run on 2026-11-03 (see
+> [Task 14 final audit](#task-14-final-audit-2026-11-03)). Earlier Task 13, Task 12, Task 11,
+> Task 10 and Task 09 final-audit runs are kept below it.
 
 ## Test levels
 
@@ -12,7 +12,7 @@
 | Backend unit | JUnit 5 (Surefire) | `backend/src/test/java/**/*Test.java` | 66 | `cd backend && ./mvnw -B clean verify` |
 | Backend integration and concurrency | JUnit 5, Spring Boot, Testcontainers PostgreSQL 16 (Failsafe) | `backend/src/test/java/**/*IT.java` | 186 | (same command) |
 | Frontend unit | Node built-in test runner | `frontend/src/**/*.test.ts` | 53 | `cd frontend && npm test` |
-| End-to-end | Playwright, Chromium | `frontend/e2e/*.spec.ts` | 9 | `cd frontend && npm run test:e2e` (needs the Compose stack running) |
+| End-to-end | Playwright, Chromium | `frontend/e2e/*.spec.ts` | 10 | `cd frontend && npm run test:e2e` (needs the Compose stack running) |
 
 These counts are executed test cases, including parameterized and repeated cases, as reported
 by Surefire, Failsafe, Node and Playwright.
@@ -84,7 +84,7 @@ neither environment settings nor a stray `.only` can narrow the run.
 | `src/lib/lib.test.ts` (9) | Dates in the theater zone, DST arithmetic, countdown skew correction, formatting (including the ticket date), UUID generation. |
 | `src/features/admin/forms.test.ts` (10) | Showtime and screen drafts: missing fields, date/time/price bounds matching the server, premium rows at the back, name not required when replacing a layout, overlap/busy/taken-name/locked-layout and cancellation-blocked messages, `INVALID_REQUEST` field labels. |
 
-## End-to-end tests (9)
+## End-to-end tests (10)
 
 Playwright drives Chromium against the real Compose stack (nginx, Spring Boot, PostgreSQL). Each
 test creates its own showtime through `POST /api/admin/showtimes`, so tests are independent and
@@ -100,6 +100,7 @@ can run in parallel without a database reset. Selectors are `data-testid` only.
 | `my-tickets.spec.ts`: a successful booking appears in My Tickets, opens its ticket, and the list is gone after reload or sign-out | `e2e.alice` books two premium seats in the UI, opens My Tickets from the header and finds the card with the reference, movie, local date and time, theater, seats, total and "Upcoming". The cards are in the API's newest-first order. The card opens the existing ticket page. Local and session storage and cookies are empty. After a reload she is signed out and sees no tickets; signed in as `e2e.bob`, her booking is absent; after sign-out, `/tickets` asks to sign in. Alice and Bob are not used, so their My Tickets stay for manual use. | Product scope §3.6 |
 | `admin.spec.ts`: a customer cannot open theater administration | Alice signing in at `/admin` sees the not-admin state; the header still has My Tickets, not Admin. | Product scope §3.7, AC-U2 |
 | `admin.spec.ts`: an admin schedules a showtime that then appears in public discovery | Dallas admin signs in at `/admin`, sees Starlight, schedules Parasite on Screen 1 in a far-future slot (retrying on overlap), sees it on the day's list, signs out, and finds the same showtime on Discover. No screen is created, so the owner's dashboard is not given extra screens. | Product scope §3.7 |
+| `admin.spec.ts`: a showtime scheduled on the date being viewed appears in that schedule immediately | Regression for the Task 14 defect: Dallas admin switches the dashboard to a far-future date, schedules Parasite on that same date (retrying on overlap), and the created showtime's card appears without changing dates. Failed against the unfixed dashboard. | Product scope §3.7 |
 | `admin.spec.ts`: an admin cancels a showtime and a customer cannot book it | Dallas admin cancels a freshly scheduled Parasite show from the dashboard. Public search omits it; the seat page shows it cancelled and the Hold button is disabled. | Product scope §3.7 |
 
 ### The search race regression
@@ -133,8 +134,9 @@ debounce, the search filters and Back/Forward are unchanged.
 
 ## What the tests do not prove
 
-- **Performance and scale.** There is no load or soak test, and no measurement of the
-  500,000-visitor target or of index use at scale (`EXPLAIN`).
+- **Performance and scale.** There is no load or soak test and no measurement of the
+  500,000-visitor target. Task 14 checked `EXPLAIN` plans and ran a bounded read probe on a
+  laptop against sample-sized data (below); neither says anything about behavior at scale.
 - **Multi-instance behavior.** All tests run one application instance; clock skew between
   instances is untested.
 - **Real payment providers.** All payment tests use the in-process simulator, whose ledger has
@@ -148,6 +150,52 @@ debounce, the search filters and Back/Forward are unchanged.
   killing the process. Outbox interruption is simulated by setting `claimed_until`, by inserting
   an inbox row before `published_at`, and by a stale `claim_token` ack after another worker
   reclaims the row (`OutboxDeliveryIT`).
+
+## Task 14 final audit (2026-11-03)
+
+Run on a MacBook (Apple M3, 16 GB, macOS 26.5.1) on branch `feature/task-14-final-audit`, with
+OpenJDK 23.0.2 (the build targets Java 21), Node 25.9.0, npm 11.12.1, Docker 28.5.1 and Compose
+2.40.3. The existing Compose stack and its database were kept (rebuilt in place, no volume reset).
+
+| Command | Result |
+|---|---|
+| `./run-tests.sh` (all suites, stack running, after both fixes) | Exit 0 in 85 s. Backend 66 unit and 186 integration (0 failures, 0 errors, 0 skipped; Maven 1:04 min), frontend 53/53 (0 skipped), Playwright 10 passed in 15.1 s |
+| `cd frontend && npm run typecheck && npm test && npm run build` | Exit 0; 53/53; Vite warns that the main chunk is over 500 kB |
+| `docker compose up -d --build --wait frontend` | Exit 0; postgres not recreated; booking `9956RB4M` still `CONFIRMED` |
+| Admin regression test, before and after the fix | Failed against the unfixed dashboard (the created showtime never appeared); after the fix, passed 3/3 with `--repeat-each=3` |
+| Flyway on a disposable PostgreSQL 16 container (not the Compose database) | V1–V13 applied to an empty database |
+
+Defects found and fixed: the admin dashboard did not show a showtime created on the date being
+viewed until the date was changed; `run-tests.sh` did not detect skipped frontend tests on
+Node 23 or later, whose default `spec` reporter prints `ℹ skipped N` instead of `# skipped N`
+(proved with a temporary skipped and todo test, then removed). Defects found and not fixed are
+listed in `docs/requirements-checklist.md` §11.
+
+Manual checks against the running stack, as `e2e.alice`, `e2e.bob` and the two theater admins
+(Alice's and Bob's histories were not touched): search, seat map, hold, decline, retry and
+booking; a hold left for its real 8-minute TTL reported `EXPIRED` and its seats were free again; the
+booking's outbox event reached the notification inbox; cross-customer and cross-theater
+access was refused; admin scheduling and cancellation.
+
+**Query plans.** `EXPLAIN` on the running database (1,306 showtimes, 67,540 `show_seat` rows):
+showtime search uses `showtime_scheduled_starts_at_idx` and applies the trigram match as a
+filter after narrowing by city and date; the seat map is an index scan on `show_seat_pk`;
+booking history, the notification inbox and the outbox relay use
+`booking_customer_history_idx`, `notification_inbox_customer_history_idx` and
+`outbox_event_unpublished_idx`.
+
+**Bounded read probe.** `ab -n 500 -c 10` (ApacheBench) against nginx on `localhost:3000`,
+anonymous, on the same laptop as the stack. All 1,500 requests succeeded.
+
+| Request | Requests/s | p50 | p95 | p99 | Max |
+|---|---|---|---|---|---|
+| `GET /api/showtimes?cityId=1&date=2026-11-05` | 832 | 9 ms | 29 ms | 51 ms | 68 ms |
+| `GET /api/showtimes?cityId=1&date=2026-11-05&q=Intersteller` | 1,089 | 7 ms | 21 ms | 34 ms | 39 ms |
+| `GET /api/showtimes/32/seats` | 1,138 | 8 ms | 14 ms | 21 ms | 25 ms |
+
+These numbers are from one short run on one machine with warm caches and no writes. They show
+that the hot reads are index-backed at sample size; they are not a capacity claim. The path to
+the stated scale is in `docs/architecture.md` §12.
 
 ## Task 13 review fixes (2026-11-03)
 

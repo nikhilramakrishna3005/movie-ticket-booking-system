@@ -47,6 +47,7 @@ erDiagram
     BOOKING ||--o{ SHOW_SEAT : "owns (when BOOKED)"
     BOOKING ||--|{ BOOKING_SEAT : contains
     SHOW_SEAT ||--o| BOOKING_SEAT : "sold once"
+    APP_USER ||--o{ NOTIFICATION_INBOX : receives
 
     LANGUAGE {
         text code PK "two lower-case letters"

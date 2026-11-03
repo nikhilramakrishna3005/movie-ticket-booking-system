@@ -2,9 +2,11 @@
 
 > **Status: DESIGN, IMPLEMENTED EXCEPT WHERE NOTED.** This document was written as the design
 > before the code and has been kept in step with it. Section 13 records what is implemented and
-> how it was verified. Background workers remain design only. `GET /bookings` was added in Task 10;
-> theater-admin reads, screen management and the `/admin` dashboard in Task 11; showtime cancellation
-> and `GET /holds/{id}` in Task 12. The implemented schema is in
+> how it was verified. The only implemented background worker is the in-process outbox relay
+> (Task 13); the hold-cleanup sweeper and payment reconciliation remain design only. `GET /bookings`
+> was added in Task 10; theater-admin reads, screen management and the `/admin` dashboard in
+> Task 11; showtime cancellation and `GET /holds/{id}` in Task 12; outbox delivery and the
+> notification inbox in Task 13. The implemented schema is in
 > `docs/data-model.md`, and the implemented API in `docs/api.md`.
 >
 > Revision 2 applies design decisions approved by the engineering owner during review of PR #1
@@ -111,7 +113,7 @@ Rules:
 ### 4.1 Entity-relationship diagram
 
 This is the design-time view of the booking core. The complete ERD of the implemented schema
-(all tables in V1–V11, including `language`, `genre`, `simulated_provider_charge` and
+(all tables in V1–V13, including `language`, `genre`, `simulated_provider_charge` and
 `city.time_zone`) is in **`docs/data-model.md`**, which is authoritative.
 
 ```mermaid
@@ -724,7 +726,7 @@ and Kafka would be added only when measurements justify them (ADRs 0001–0003).
 | Admin endpoint (create showtime) | Implemented (Task 06): `POST /admin/showtimes`, theater-scoped (§8.1). Task 11 added theater/screen/schedule reads, screen creation and pre-showtime layout replacement, and the admin dashboard at `/admin`. Task 12 added `POST /admin/showtimes/{id}/cancel` and a Cancel control on the dashboard. |
 | React UI | Implemented (Task 07): customer flow (discover, movie, seats, checkout, ticket). Frontend unit tests (Node test runner) cover the API client, payment-outcome classification and helpers. Booking flows (success after decline, timeout/`UNKNOWN` polling, seat conflict, admin refused, hold expiry) were exercised in headless Chrome against the Compose stack by a throwaway script in Task 07. Since Task 08, the booking, decline-retry and seat-conflict flows are covered by the Playwright suite. Task 10 added the My Tickets screen (`/tickets`, history held in React state only) and fixed a race where a pending search debounce navigated a user who had just opened a showtime back to Discover. Task 11 added the theater-admin dashboard (`/admin`): assigned theaters only, screens with a locked-layout rule, scheduling a showtime, and hiding Hold from admins. Task 12 added a Cancel control on that dashboard and, after a reload, checkout can recover an ACTIVE hold via `GET /holds/{id}` once the customer signs in again. Passwords stay in memory. Task 13 added `/notifications` backed by `GET /api/notifications` (no client-side fake inbox). |
 | Integration / concurrency tests | Security, schema, hold, payment, discovery and admin ITs. Earlier phases ran them on local PostgreSQL 16 only. In Task 06 Docker was installed in the agent VM and the **whole suite ran on Testcontainers for the first time**: 132/132 ITs and 59/59 unit tests passed. |
-| Playwright E2E tests | Implemented (Task 08): `frontend/e2e/`, Chromium only. Each test schedules its own showtime through the admin API (the admin UI tests create one through the dashboard instead). Task 10 added 3 tests (search race, search filtering, My Tickets). Task 11 added 2 (`admin.spec.ts`: customer refused; admin schedules a showtime that appears in discovery). Task 12 added 1 (admin cancels a showtime; a customer cannot book it) and switched booking, seat-conflict and My Tickets tests to `e2e.alice` / `e2e.bob`. 9 tests passed on a Mac against the running Compose stack, and `--repeat-each=3` passed 27/27. Timeout/`UNKNOWN`, keyboard and mobile E2E tests are not implemented. |
+| Playwright E2E tests | Implemented (Task 08): `frontend/e2e/`, Chromium only. Each test schedules its own showtime through the admin API (the admin UI tests create one through the dashboard instead). Task 10 added 3 tests (search race, search filtering, My Tickets). Task 11 added 2 (`admin.spec.ts`: customer refused; admin schedules a showtime that appears in discovery). Task 12 added 1 (admin cancels a showtime; a customer cannot book it) and switched booking, seat-conflict and My Tickets tests to `e2e.alice` / `e2e.bob`. 9 tests passed on a Mac against the running Compose stack, and `--repeat-each=3` passed 27/27. Task 14 added 1 (a showtime scheduled on the date being viewed appears immediately); 10 passed. Timeout/`UNKNOWN`, keyboard and mobile E2E tests are not implemented. |
 | Final audit (2026-11-02) | From a clean database: backend 59/59 unit tests and 132/132 integration tests (Testcontainers), frontend 34/34 unit tests and the build, and Playwright 3/3 on two runs. The README steps were also followed in a fresh clone. Details in `docs/test-strategy.md` and `docs/requirements-checklist.md` §10. |
 | Task 10 (2026-11-03) | On a Mac (JDK 23, Docker Desktop): backend 64/64 unit and 142/142 integration tests (Testcontainers), frontend 40/40 unit tests and the build, Playwright 6/6 and 18/18 with `--repeat-each=3` against the running Compose stack, which was rebuilt in place (no volume reset). See `docs/test-strategy.md`. |
 | Task 11 (2026-11-03) | On a Mac (JDK 23, Docker Desktop): backend 64/64 unit and 158/158 integration tests, frontend 50/50 unit tests, Playwright 8/8 and 24/24 with `--repeat-each=3` against the running Compose stack, rebuilt in place (no volume reset). Booking `9956RB4M` kept. No new Flyway migration. See `docs/test-strategy.md`. |

@@ -14,7 +14,7 @@ React 19 and Docker Compose.
 | Requirements coverage | [`docs/requirements-checklist.md`](docs/requirements-checklist.md) |
 | Product scope and deferred features | [`docs/product-scope.md`](docs/product-scope.md) |
 | Architecture, booking and payment flow | [`docs/architecture.md`](docs/architecture.md) |
-| Data model (ERD from Flyway V1–V10) | [`docs/data-model.md`](docs/data-model.md) |
+| Data model (ERD from Flyway V1–V13) | [`docs/data-model.md`](docs/data-model.md) |
 | REST API reference | [`docs/api.md`](docs/api.md) |
 | Test strategy and final results | [`docs/test-strategy.md`](docs/test-strategy.md) |
 | Decisions: Redis, Kafka, Solr deferred (accepted) | [`docs/decisions/`](docs/decisions/) |
@@ -191,8 +191,8 @@ cd frontend && npm ci && npx playwright install --with-deps chromium && npm run 
 
 What each suite proves, and the latest results, are in
 [`docs/test-strategy.md`](docs/test-strategy.md). The latest results were 66 backend unit tests,
-186 integration tests, 53 frontend unit tests and 9 Playwright tests, all passing, on
-2026-11-03.
+186 integration tests, 53 frontend unit tests and 10 Playwright tests, all passing, on
+2026-11-03 (Task 14 final audit).
 
 ## Repository structure
 
