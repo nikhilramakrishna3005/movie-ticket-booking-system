@@ -274,9 +274,10 @@ Known limitations of what *is* built:
 - **Reload:** credentials and checkout state live only in memory, so a reload signs you out.
 - **Search typed just before leaving Discover:** text not yet committed to the URL (under
   300 ms) is not kept in the history entry, so Back shows Discover without it.
-- **UI defects found in the final audit, not fixed:** on the admin page between about 1024 and
-  1424 px wide, the Screens column collapses and overlaps the schedule; "Cancel showtime" has no
-  confirmation step; Discover says "1 showtimes" for a single result.
+- **UI defects found in the final audit:** fixed in Task 15, each with a regression test (admin
+  columns overlapping between about 1024 and 1424 px, one-click "Cancel showtime", and
+  "1 showtimes" on Discover); see
+  [`docs/requirements-checklist.md`](docs/requirements-checklist.md) §10–11.
 - **Sample data window:** seeded showtimes end on 2027-01-31; after that, Discover shows no
   seeded showtimes and the Playwright fixture's screen lookup fails.
 - **Ports:** host ports `3000` and `5432` must be free, or set `FRONTEND_HOST_PORT` and

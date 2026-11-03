@@ -233,6 +233,17 @@ A clean `docker compose down -v` start was not run for Task 13, to keep the loca
 
 A clean `docker compose down -v` start was not run for Task 14, to keep the local database.
 
+**Task 15 UI defect fixes (2026-11-03, same Mac, existing Compose stack and database kept; frontend only):**
+
+| Check | Result |
+|---|---|
+| New regressions against the unfixed frontend | Both new Playwright tests failed: page overflow of 645 px at 375 px wide, and no confirmation dialog |
+| Frontend: `npm run typecheck`; `npm test`; `npm run build` | Exit 0; 54/54; build succeeds with Vite's over-500 kB chunk warning |
+| Frontend rebuilt in place: `docker compose up -d --build --wait --no-deps frontend` (no `down -v`) | Healthy; backend and PostgreSQL not recreated; Flyway at V13; booking `9956RB4M` still `CONFIRMED` |
+| Single runner: `./run-tests.sh` against the running stack (JDK 23) | Exit 0 in 85 s: backend 66/66 unit and 186/186 integration, frontend 54/54, Playwright 12/12, no skipped tests |
+| New admin Playwright tests repeated: `--repeat-each=3` | 6/6 |
+| Manual check: cancelling a showtime with a live hold through the dialog | 409 `SHOWTIME_HAS_ACTIVE_HOLDS`; dialog closes and the card shows the existing message; showtime stays scheduled |
+
 ## 11. Remaining gaps (honest summary)
 
 Deliberately omitted features are listed, with reasons and what was built instead, in
@@ -251,11 +262,11 @@ Deliberately omitted features are listed, with reasons and what was built instea
   keyboard-only use or mobile viewports; these are covered at the API or unit level, or not at
   all (`docs/test-strategy.md`). Task 14 exercised hold expiry (real 8-minute TTL) and the inbox
   manually against the running stack.
-- Known UI defects found in Task 14 and not fixed (no data impact): on the admin page, when the
-  14-day date strip is shown, the two-column grid squeezes the Screens column to 0 px at a
-  1024 px viewport (and below its 22rem width up to about 1424 px), so the screen cards overlap
-  the schedule. "Cancel showtime" acts on one click, without a confirmation step. The Discover
-  summary reads "1 showtimes" for a single result.
+- The three UI defects found in Task 14 were fixed in Task 15, each with a regression test: the
+  admin Screens and Schedule columns now stack below 1280 px and no longer overlap (the stacked
+  layout also no longer overflows horizontally at 375 and 768 px); "Cancel showtime" asks for
+  confirmation in a dialog that shows the movie, date, time and screen; the Discover summary says
+  "1 showtime".
 - No load testing, so no scalability claim. Task 14 ran only a bounded local read probe
   (`docs/test-strategy.md`).
 - The sample data, and the E2E screen lookup, stop working after 2027-01-31.
