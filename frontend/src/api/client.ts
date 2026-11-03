@@ -1,6 +1,7 @@
 import type {
   ApiErrorBody,
   BookingConfirmation,
+  BookingHistoryPage,
   City,
   CurrentUser,
   Hold,
@@ -12,6 +13,11 @@ import type {
   ShowtimePage,
   ShowtimeSearchParams,
 } from './types.ts';
+
+export interface BookingHistoryParams {
+  page?: number;
+  size?: number;
+}
 
 export interface Credentials {
   username: string;
@@ -76,7 +82,7 @@ export function encodeBasic({ username, password }: Credentials): string {
   return `Basic ${btoa(binary)}`;
 }
 
-function toQuery(params: ShowtimeSearchParams): string {
+function toQuery(params: ShowtimeSearchParams | BookingHistoryParams): string {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== null && value !== '') {
@@ -180,6 +186,8 @@ export function createApiClient(options: ApiClientOptions) {
       }),
     payment: (paymentId: string) => get<PaymentResponse>(`/api/payments/${paymentId}`),
     booking: (bookingId: string) => get<BookingConfirmation>(`/api/bookings/${bookingId}`),
+    /** The server derives the customer from the credentials; there is no customer parameter to send. */
+    bookings: (params: BookingHistoryParams = {}) => get<BookingHistoryPage>(`/api/bookings${toQuery(params)}`),
   };
 }
 

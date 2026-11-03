@@ -123,7 +123,8 @@ function Ticket({ booking, showtime }: { booking: BookingConfirmation; showtime:
         </div>
       </motion.article>
 
-      <div className="mt-8 flex justify-center">
+      <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <ButtonLink to="/tickets" variant="secondary" data-testid="confirmation-my-tickets">All my tickets</ButtonLink>
         <ButtonLink to="/" variant="secondary">Book another movie</ButtonLink>
       </div>
     </div>

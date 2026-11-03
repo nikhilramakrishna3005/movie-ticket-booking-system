@@ -1,8 +1,8 @@
-import { LogIn, LogOut, UserRound } from 'lucide-react';
-import { Link, useNavigate } from 'react-router';
+import { LogIn, LogOut, Ticket, UserRound } from 'lucide-react';
+import { Link, NavLink, useNavigate } from 'react-router';
 import { useAuth } from '../state/AuthContext.tsx';
 import { useCheckoutSessions } from '../state/CheckoutContext.tsx';
-import { Button } from './ui/Button.tsx';
+import { Button, buttonClass } from './ui/Button.tsx';
 
 export function Logo() {
   return (
@@ -35,6 +35,17 @@ export function Header() {
           <Logo />
         </Link>
         <nav className="flex items-center gap-2" aria-label="Account">
+          {user?.role !== 'THEATER_ADMIN' && (
+            <NavLink
+              to="/tickets"
+              data-testid="nav-my-tickets"
+              className={({ isActive }) => buttonClass('ghost', 'sm', isActive ? 'bg-white/5 text-mist-50' : '')}
+            >
+              <Ticket className="size-4 text-violet-300" aria-hidden />
+              <span className="hidden sm:inline">My tickets</span>
+              <span className="sr-only sm:hidden">My tickets</span>
+            </NavLink>
+          )}
           {user ? (
             <>
               <span

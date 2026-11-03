@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { addDays, countdown, dateRange, dayLabel, instantIn, isIsoDate, localTime, remainingMs, todayIn } from './dates.ts';
+import { addDays, countdown, dateRange, dayLabel, instantIn, isIsoDate, localTime, remainingMs, ticketDate, todayIn } from './dates.ts';
 import { duration, price, seatList } from './format.ts';
 import { newIdempotencyKey } from './idempotency.ts';
 import { monogram, posterFor } from './posters.ts';
@@ -30,6 +30,7 @@ describe('dates', () => {
     assert.equal(localTime('13:00:00'), '1:00 PM');
     assert.equal(localTime('00:05:00'), '12:05 AM');
     assert.equal(instantIn('2026-11-03T19:00:00Z', 'America/Chicago'), 'Tue, Nov 3 · 1:00 PM CST');
+    assert.equal(ticketDate('2027-02-05'), 'Fri, Feb 5, 2027');
   });
 
   it('corrects the hold countdown for client clock skew', () => {

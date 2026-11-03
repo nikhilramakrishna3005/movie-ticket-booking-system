@@ -150,6 +150,34 @@ export interface BookingConfirmation {
   confirmedAt: string;
 }
 
+/** One entry of GET /api/bookings; localDate and localStartTime are in timeZone. */
+export interface BookingSummary {
+  bookingId: string;
+  reference: string;
+  status: 'CONFIRMED';
+  showtimeId: number;
+  movieTitle: string;
+  theaterName: string;
+  screenName: string;
+  city: string;
+  startsAt: string;
+  localDate: string;
+  localStartTime: string;
+  timeZone: string;
+  seats: BookedSeat[];
+  totalAmount: number;
+  confirmedAt: string;
+}
+
+/** The signed-in customer's bookings, newest first. */
+export interface BookingHistoryPage {
+  items: BookingSummary[];
+  page: number;
+  size: number;
+  totalItems: number;
+  totalPages: number;
+}
+
 export interface PaymentResponse {
   paymentId: string;
   holdId: string;
