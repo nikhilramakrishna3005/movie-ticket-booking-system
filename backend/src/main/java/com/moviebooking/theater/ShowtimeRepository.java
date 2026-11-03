@@ -1,7 +1,8 @@
 package com.moviebooking.theater;
 
 import java.math.BigDecimal;
-import java.util.Optional;
+import java.util.Collection;
+import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -11,13 +12,14 @@ import org.springframework.data.repository.query.Param;
 public interface ShowtimeRepository extends JpaRepository<Showtime, Long> {
 
     @Query(value = """
-            SELECT t.name AS theaterName, sc.name AS screenName, c.name AS cityName, c.state_code AS stateCode
+            SELECT st.id AS showtimeId, t.name AS theaterName, sc.name AS screenName, c.name AS cityName,
+                   c.state_code AS stateCode, c.time_zone AS timeZone
             FROM showtime st
             JOIN screen sc ON sc.id = st.screen_id
             JOIN theater t ON t.id = sc.theater_id
             JOIN city c ON c.id = t.city_id
-            WHERE st.id = :showtimeId""", nativeQuery = true)
-    Optional<VenueNames> findVenueNames(@Param("showtimeId") long showtimeId);
+            WHERE st.id IN (:showtimeIds)""", nativeQuery = true)
+    List<VenueNames> findVenueNames(@Param("showtimeIds") Collection<Long> showtimeIds);
 
     /**
      * Seat inventory for a new showtime: one AVAILABLE row per physical seat of its screen, priced
@@ -35,6 +37,8 @@ public interface ShowtimeRepository extends JpaRepository<Showtime, Long> {
             @Param("premiumPrice") BigDecimal premiumPrice);
 
     interface VenueNames {
+        Long getShowtimeId();
+
         String getTheaterName();
 
         String getScreenName();
@@ -42,5 +46,7 @@ public interface ShowtimeRepository extends JpaRepository<Showtime, Long> {
         String getCityName();
 
         String getStateCode();
+
+        String getTimeZone();
     }
 }

@@ -40,6 +40,12 @@ export function longDate(date: string): string {
   );
 }
 
+/** "Tue, Nov 3, 2026": with the year, for lists that span more than one year. */
+export function ticketDate(date: string): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+    .format(new Date(`${date}T00:00:00Z`));
+}
+
 /** "13:00:00" → "1:00 PM" */
 export function localTime(time: string): string {
   const [hours = 0, minutes = 0] = time.split(':').map(Number);

@@ -24,7 +24,7 @@ export async function openShowtimeFromDiscovery(page: Page, showtime: FreshShowt
   await expect(page.getByTestId(`date-option-${showtime.localDate}`)).toHaveAttribute('aria-checked', 'true');
 
   await page.getByTestId('search-input').fill(showtime.movieTitle);
-  // The search is debounced into the URL; clicking a chip before it lands lets the late update override the navigation.
+  // The search is debounced into the URL; waiting for it means the chip is clicked in the filtered results.
   await expect(page).toHaveURL((url) => url.searchParams.get('q') === showtime.movieTitle);
   const card = page.getByTestId('movie-card').and(page.locator(`[data-movie-id="${showtime.movieId}"]`));
   await expect(card).toBeVisible();

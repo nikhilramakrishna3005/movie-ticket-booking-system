@@ -135,6 +135,27 @@ describe('api client', () => {
     await api.releaseHold('h1');
   });
 
+  it('requests the booking history with in-memory credentials and no customer parameter', async () => {
+    const emptyPage = { items: [], page: 0, size: 10, totalItems: 0, totalPages: 0 };
+    const { calls, impl } = fakeFetch([json(200, emptyPage), json(200, { ...emptyPage, page: 2 })]);
+    const api = createApiClient({ fetch: impl, getCredentials: () => ({ username: 'alice', password: 'pw' }) });
+
+    assert.deepEqual(await api.bookings(), emptyPage);
+    await api.bookings({ page: 2, size: 10 });
+
+    assert.equal(calls[0]!.url, '/api/bookings');
+    assert.equal(calls[1]!.url, '/api/bookings?page=2&size=10');
+    assert.equal(header(calls[1]!, 'Authorization'), `Basic ${btoa('alice:pw')}`);
+    assert.equal(calls[1]!.init.method, 'GET');
+  });
+
+  it('reports a rejected booking-history request as a typed 401', async () => {
+    const { impl } = fakeFetch([json(401, { code: 'UNAUTHENTICATED', message: 'Valid credentials are required', details: null })]);
+    const api = createApiClient({ fetch: impl, getCredentials: () => null });
+
+    await assert.rejects(api.bookings(), { code: 'UNAUTHENTICATED', status: 401 });
+  });
+
   it('validates login credentials explicitly rather than from the store', async () => {
     const { calls, impl } = fakeFetch([json(200, { id: 1, username: 'bob', displayName: 'Bob', role: 'CUSTOMER' })]);
     const api = createApiClient({ fetch: impl, getCredentials: () => null });

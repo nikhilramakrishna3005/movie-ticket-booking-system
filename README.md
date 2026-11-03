@@ -14,7 +14,7 @@ React 19 and Docker Compose.
 | Requirements coverage | [`docs/requirements-checklist.md`](docs/requirements-checklist.md) |
 | Product scope and deferred features | [`docs/product-scope.md`](docs/product-scope.md) |
 | Architecture, booking and payment flow | [`docs/architecture.md`](docs/architecture.md) |
-| Data model (ERD from Flyway V1–V9) | [`docs/data-model.md`](docs/data-model.md) |
+| Data model (ERD from Flyway V1–V10) | [`docs/data-model.md`](docs/data-model.md) |
 | REST API reference | [`docs/api.md`](docs/api.md) |
 | Test strategy and final results | [`docs/test-strategy.md`](docs/test-strategy.md) |
 | Decisions: Redis, Kafka, Solr deferred (accepted) | [`docs/decisions/`](docs/decisions/) |
@@ -102,6 +102,9 @@ admins use `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
 - Checkout with a countdown and a simulated outcome (`SUCCESS`, `DECLINE`, `TIMEOUT`), with retry
   after a decline and polling while an outcome is `UNKNOWN`.
 - A digital ticket.
+- My Tickets (`/tickets`, "My tickets" in the header): the signed-in customer's confirmed
+  bookings, newest first, each opening its ticket. Like the sign-in, the list is kept in memory
+  only, so a reload or sign-out asks you to sign in again.
 
 **Backend (Spring Boot, `backend/`):** a modular monolith with packages `catalog`, `theater`,
 `booking`, `payment`, `admin` and `security`.
@@ -112,10 +115,12 @@ admins use `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
 - **Database backstops:** constraints such as `UNIQUE (showtime_id, seat_id)` on booked seats.
 - **Admin:** theater-scoped showtime creation, with overlaps rejected by an exclusion
   constraint.
+- **Booking history:** `GET /api/bookings` lists only the caller's confirmed bookings, paginated
+  (size capped at 50). The customer comes from the credentials, never from a parameter.
 
 **Not implemented (by design or cut for time):**
 - An admin UI, and showtime cancellation.
-- A "my bookings" list (`GET /api/bookings`) and `GET /api/holds/{id}`.
+- `GET /api/holds/{id}`, and booking cancellation.
 - Background workers: hold cleanup, outbox relay, payment reconciliation. The outbox is written
   but not delivered.
 - Redis, Kafka and Solr, which are deferred by the ADRs.
@@ -134,7 +139,8 @@ the repository root:
 It runs the backend unit and integration tests, the frontend unit tests and the Playwright E2E
 tests against the running stack, in that order. It stops at the first failure with a non-zero exit
 code. It also fails if the stack is not healthy, or if any suite reports a skipped test.
-It needs bash, curl, JDK 21, Node 22.18+ and Docker. It has been run on Linux only.
+It needs bash, curl, JDK 21 or newer, Node 22.18+ and Docker. It has been run on Linux and
+macOS (with JDK 23).
 On Windows, use WSL. The first E2E run on a new machine needs the browser's system libraries once:
 `cd frontend && npx playwright install --with-deps chromium` (uses sudo on Linux).
 
@@ -161,9 +167,9 @@ cd frontend && npm ci && npx playwright install --with-deps chromium && npm run 
   `frontend/test-results/`.
 
 What each suite proves, and the latest results, are in
-[`docs/test-strategy.md`](docs/test-strategy.md). The latest results were 59 backend unit tests,
-132 integration tests, 34 frontend unit tests and 3 Playwright tests, all passing, on
-2026-11-02.
+[`docs/test-strategy.md`](docs/test-strategy.md). The latest results were 64 backend unit tests,
+142 integration tests, 40 frontend unit tests and 6 Playwright tests, all passing, on
+2026-11-03.
 
 ## Repository structure
 
@@ -171,7 +177,7 @@ What each suite proves, and the latest results, are in
 backend/                 Spring Boot application (Maven wrapper, Dockerfile)
   src/main/java/com/moviebooking/
     catalog/ theater/ booking/ payment/ admin/ security/ config/
-  src/main/resources/db/migration/   Flyway V1–V9 (schema, sample data, demo users)
+  src/main/resources/db/migration/   Flyway V1–V10 (schema, sample data, demo users, indexes)
   src/test/java/         JUnit unit tests (*Test) and Testcontainers integration tests (*IT)
 frontend/                React + TypeScript + Vite app, nginx config, Dockerfile
   src/                   pages, components, features, API client, unit tests (*.test.ts)
@@ -192,9 +198,12 @@ AGENTS.md                assignment constraints and working rules
 - **Sample data window:** the seeded showtimes end on 2027-01-31. After that, discovery shows no
   seeded showtimes, and the Playwright fixture, which finds a screen through the next 14 days of
   seeded showtimes, fails.
-- **Search delay race:** on the discover page, the search box updates the URL after a 300 ms
-  delay. Clicking a showtime within that window can be overridden by the late update. Not fixed;
-  the E2E tests wait for the search to apply first.
+- **Search typed just before leaving Discover:** the search box updates the URL after a 300 ms
+  delay. Opening a showtime within that window now keeps you on the showtime (fixed in Task 10,
+  covered by `search-navigation.spec.ts`), but the unsaved search text is not kept, so Back
+  shows Discover without it.
+- **My Tickets:** confirmed bookings only (there is no cancellation). It loads 10 at a time,
+  and "Show older tickets" loads the next 10; there is no search or filter.
 - **Reload during checkout:** checkout state lives only in memory, so a reload returns you to
   browsing and the hold simply expires.
 - **Port conflicts:** host ports `3000` (frontend) and `5432` (PostgreSQL) must be free, or set

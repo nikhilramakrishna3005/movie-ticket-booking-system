@@ -79,7 +79,8 @@ for how the design accounts for this and what is out of reach for this assessmen
 
 ### 3.6 Customer: view my bookings
 1. Customer sees their confirmed bookings (movie, theater, time, seats, reference).
-   (On the cut list; the confirmation page alone satisfies the core flow.)
+   (Originally on the cut list; delivered in Task 10 as `GET /api/bookings` and the My Tickets
+   screen.)
 
 ### 3.7 Theater Admin: create showtimes (API only)
 1. An admin creates a showtime (movie, screen, start time, language, prices) **only for a
@@ -206,10 +207,10 @@ Each criterion should map to at least one automated test once implemented (see
   local times shown for a showtime, and an admin's entered start time are in the theater's city
   time zone (`city.time_zone`; all sample cities use `America/Chicago`).
 
-## 8. Delivery status (final audit, 2026-11-02)
+## 8. Delivery status (final audit, 2026-11-02; updated for Task 10, 2026-11-03)
 
 **Delivered and covered by automated tests:**
-- Workflows 3.1–3.5 and 3.7.
+- Workflows 3.1–3.7 (3.6, "view my bookings", was added in Task 10).
 - Every acceptance criterion in §5 except part of AC-H10: there is no "view a hold" endpoint.
 - Failure cases F1–F7 and F9–F14.
 - F8 (a crash between charge and confirmation) is handled by on-demand resolution of a stale
@@ -220,7 +221,6 @@ Each criterion should map to at least one automated test once implemented (see
 
 | Feature | Why / where recorded |
 |---|---|
-| "My bookings" list (§3.6, `GET /bookings`) | Cut list item 4; the confirmation page satisfies the core flow |
 | `GET /holds/{id}` | Not needed by the React flow, which keeps checkout state in memory |
 | Admin UI and showtime cancellation | Cut list items 1 and 3; showtimes are created through the API |
 | Background workers: hold-cleanup sweeper, outbox relay, scheduled payment reconciliation | Cut list item 2; correctness relies on lazy expiry and on-demand resolution instead |

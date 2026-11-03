@@ -13,9 +13,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.moviebooking.booking.BookingService.BookingConfirmation;
+import com.moviebooking.booking.BookingService.BookingPage;
 import com.moviebooking.booking.CheckoutService.PaymentOutcome;
 import com.moviebooking.config.ApiException;
 import com.moviebooking.payment.PaymentScenario;
@@ -62,6 +64,13 @@ public class PaymentController {
     public PaymentResponse payment(@AuthenticationPrincipal AuthenticatedUser customer,
             @PathVariable UUID paymentId) {
         return PaymentResponse.of(checkoutService.getPayment(customer, paymentId));
+    }
+
+    /** The caller's own history: there is deliberately no customer parameter. */
+    @GetMapping("/bookings")
+    public BookingPage bookings(@AuthenticationPrincipal AuthenticatedUser customer,
+            @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
+        return bookingService.listForCustomer(customer, BookingPageRequest.of(page, size));
     }
 
     @GetMapping("/bookings/{bookingId}")

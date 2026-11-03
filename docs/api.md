@@ -28,6 +28,7 @@
 | `DELETE /api/holds/{holdId}` | customer (owner) | 204 | 404 (not yours or unknown); 409 `PAYMENT_IN_PROGRESS` / `HOLD_CONVERTED` |
 | `POST /api/holds/{holdId}/payment` | customer (owner) | 201 booked; 202 `UNKNOWN` | 400; 402 `PAYMENT_DECLINED`; 404; 409 `PAYMENT_VOIDED` / `PAYMENT_IN_PROGRESS` / `HOLD_EXPIRED` / `HOLD_NOT_ACTIVE` / `HOLD_TOO_CLOSE_TO_EXPIRY` / `TOO_MANY_ATTEMPTS` / `SEATS_BUSY`; 422 `IDEMPOTENCY_KEY_REUSED` |
 | `GET /api/payments/{paymentId}` | customer (owner) | 200 payment | 404 |
+| `GET /api/bookings` | customer (own bookings only) | 200 page | 400 `INVALID_REQUEST` |
 | `GET /api/bookings/{bookingId}` | customer (owner) | 200 booking | 404 |
 | `POST /api/admin/showtimes` | theater admin, assigned theaters only | 201 created showtime | 400 `INVALID_REQUEST` / `INVALID_START_TIME`; 403; 409 `SHOWTIME_OVERLAP` / `SCREEN_BUSY` |
 
@@ -39,7 +40,6 @@ Rules for every protected endpoint:
 
 **Designed but not implemented:**
 - `GET /api/holds/{id}`
-- `GET /api/bookings` (a list of my bookings)
 - Showtime cancellation
 
 ## Errors
@@ -238,6 +238,39 @@ Polling the `TIMEOUT` payment above returned:
 ```json
 {"paymentId":"2115311c-9542-4747-b39d-3356f642e534","status":"SUCCEEDED","amount":12.50,
  "booking":{"reference":"XRN54PHW","status":"CONFIRMED", …}}
+```
+
+### `GET /api/bookings`
+
+This lists the signed-in customer's own `CONFIRMED` bookings, newest first (by confirmation
+time, then booking id). The customer always comes from the credentials. **There is no customer
+parameter**; a `customerId=` in the query is ignored like any other unknown parameter. Holds
+that were never paid, and declined attempts, are not listed. A theater admin gets 403.
+
+| Parameter | Meaning |
+|---|---|
+| `page` | Page number, 0–1000. Default 0. |
+| `size` | Page size. Default 10, capped at 50. |
+
+```bash
+curl -u alice:alice-demo-pass 'http://localhost:3000/api/bookings?size=2'
+```
+```json
+{"items":[{"bookingId":"751764aa-85a3-4f99-b50d-d949f0d24b76","reference":"9956RB4M","status":"CONFIRMED",
+  "showtimeId":26,"movieTitle":"Interstellar","theaterName":"Congress Avenue Cinema","screenName":"Screen 1",
+  "city":"Austin, TX","startsAt":"2026-11-05T19:00:00Z","localDate":"2026-11-05","localStartTime":"13:00:00",
+  "timeZone":"America/Chicago",
+  "seats":[{"seatId":97,"rowLabel":"D","seatNumber":7,"category":"STANDARD","price":12.50}],
+  "totalAmount":12.50,"confirmedAt":"2026-11-03T17:27:54.383776Z"}],
+ "page":0,"size":2,"totalItems":1,"totalPages":1}
+```
+
+A customer with no bookings gets `{"items":[],"page":0,"size":10,"totalItems":0,"totalPages":0}`.
+A page past the end also returns an empty `items` list. An invalid parameter returns 400. For
+example, `page=1001` returns:
+
+```json
+{"code":"INVALID_REQUEST","message":"page must be between 0 and 1000","details":{"parameter":"page"}}
 ```
 
 ### `GET /api/bookings/{bookingId}`

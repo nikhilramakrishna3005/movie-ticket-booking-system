@@ -83,6 +83,7 @@ Record only findings from human reviews that actually took place. Do not pre-pop
 | 2026-11-02 | Task 08 / PR #8 | **Human review found** that the E2E fixture `findScreenId()` sent `city=1` to `GET /api/showtimes`, whose parameter is `cityId`. The API ignores unknown parameters, so the filter was silently not applied. | Fixed in `5a3c6d1`: the fixture uses `cityId` and asserts every returned showtime is in Dallas, so an unapplied filter fails the test. Against the running stack, `city=1` returned cities 1, 2 and 3; `cityId=1` returned only city 1. Playwright 3/3 on two runs. |
 | 2026-11-02 | Task 09 (final audit, prompt) | The owner asked for a submission audit: honest requirements checklist, documentation from the actual code, Git and secret checks, a clean-start verification, no invented hours, and no new features. | This PR. Results are in `docs/requirements-checklist.md` and `docs/test-strategy.md`. |
 | 2026-11-02 | Task 09 / PR #9 (review) | The owner accepted ADRs 0001–0003 (Redis, Kafka and Solr stay deferred), and asked for one root-level command that runs every test suite and fails on any failure or skipped test. | ADR statuses set to Accepted, with the status history kept; `run-tests.sh` added and verified (`docs/test-strategy.md`). |
+| 2026-11-03 | Task 10 (prompt) | The owner asked for the search debounce race to be fixed at its cause, with a deterministic Playwright regression that fails first, and for a customer booking history (`GET /api/bookings` plus a My Tickets screen) with the customer taken only from the principal. On the owner's Mac, the existing Compose stack and its database, which held a booking made by hand, had to be kept: "Do not run docker compose down -v or delete any database volume without explicit permission." | Implemented on `feature/task-10-search-race-and-my-bookings`. The stack was only rebuilt in place, and the hand-made booking was checked before and after V10 was applied. |
 
 ## 5. AI mistakes observed
 
@@ -102,10 +103,13 @@ the human owner to classify; none of those are entered here.
 | 2026-11-02 | Task 07 (React) | `ScrollToTop` returned `window.scrollTo()` from an expression-bodied effect. Current Chrome returns a Promise from `scrollTo`, which React then called as the effect cleanup, crashing the app on every route change. Card posters were also blank because of a positioning class conflict. | The AI agent's headless-Chrome flow script against the Compose stack (the crash appeared in the captured console stack trace). | `1598feb`: block-bodied effects, a `fill` prop on `Poster`, and other layout fixes found in the same runs. |
 | 2026-11-02 | Task 07 (checkout) | A fresh 8-minute hold displayed as "8:01" because the countdown rounded up and sub-second clock skew pushed it over. Separately, a 401 during checkout unmounted the checkout page, so after re-login a retry would have minted a **new** idempotency key for an attempt whose outcome might be unknown. | "8:01": the headless flow script's captured countdown text. The 401 issue: the AI agent's own review of the re-login path. | `c25f062`: the countdown rounds down, and checkout stays mounted during re-login so the open attempt keeps its key. |
 | 2026-11-02 | Task 08 (Playwright) | The first fixture looked up Starlight's screen with a dateless search, which defaults to today; today had no seeded showtimes, so both tests failed. | The first Playwright run. | The fixture scans the next 14 days. The query parameter in that fix was wrong (`city`), which the human found in review (§4.3). |
-| 2026-11-02 | Task 08 (Playwright) | The decline test clicked a showtime within the discover page's 300 ms search debounce, and the late search update replaced the navigation. This is an **app race**, not only a test problem. | The second Playwright run (1 of 2 failed). | The test waits for the search to apply before clicking. The app race is **not fixed** (out of scope) and is listed in the README known limitations. |
+| 2026-11-02 | Task 08 (Playwright) | The decline test clicked a showtime within the discover page's 300 ms search debounce, and the late search update replaced the navigation. This is an **app race**, not only a test problem. | The second Playwright run (1 of 2 failed). | The test waits for the search to apply before clicking. The app race was **not fixed** then (out of scope) and was listed in the README known limitations. It was fixed in Task 10 (below). |
 | 2026-11-02 | Task 09 (audit) | The README's example search `cityId=1&date=2026-11-03&q=Intersteller` returned no results (Interstellar was not showing in Dallas that day). The architecture status table still said holds and payments were "Testcontainers not run", although they had passed on Testcontainers since Task 06. The design API table lacked `HOLD_CONVERTED`. | The AI agent ran every documented example against the clean stack during the audit. | README example changed to `cityId=2`; status rows corrected; `docs/api.md` lists the codes found in the code. |
+| 2026-11-03 | Task 10 (search race) | The `MessagePort` override in the spec did not type-check. Playwright strips types, so the tests ran, but the frontend Docker build, which runs `tsc -b` over `e2e/`, failed. | The first `docker compose up -d --build` after the spec was written. | Typed `this: MessagePort` and the message argument; the image built. |
+| 2026-11-03 | Task 10 (history API) | The same-instant tie-break test computed the expected order with Java's `UUID.compareTo`, which compares signed longs. PostgreSQL orders `uuid` by unsigned bytes, so the expectation could disagree with a correct query. | Found by the AI agent while getting `BookingHistoryApiIT` to pass on Testcontainers; whether a failing run or reading the code came first was not recorded. | The test compares the lowercase id strings, which order the same way as PostgreSQL. |
+| 2026-11-03 | Task 10 (My Tickets) | On a phone-width screen, the card's poster strip cropped the movie monogram to its bottom edge. | Throwaway Playwright screenshots (390 px and 1280 px wide) taken by the AI agent, not committed. | The poster is shown from the `sm` breakpoint up; the card's title already names the movie. |
 
-## 6. Task prompts and context (Tasks 06–09)
+## 6. Task prompts and context (Tasks 06–10)
 
 The prompts below were given by the human owner to one Cursor cloud agent (Claude) working in a
 VM with a clone of this repository. Earlier phases (PRs #1–#4) were done by a different agent
@@ -119,14 +123,19 @@ The prompts are summarized, and constraints are quoted where they shaped the res
 | 08: Playwright E2E (PR #8) | A reliable Playwright suite against the Compose app: a successful booking, and a decline followed by a retry with a new key, run twice against a clean database. | "Use data-testid selectors." "No arbitrary sleeps." "Tests must be independent and use fresh/resettable booking data." "Never use already-booked seats." "Do not disable tests or hide failures." |
 | 08 follow-up (PR #8) | Fix the `city` → `cityId` parameter found in human review, add an assertion that the filter applies, check the other parameters, and run the suite twice. | "Make one small descriptive fix commit." "Do not start additional feature work." |
 | 09: final audit (this PR) | Requirements checklist, accurate docs from the actual code, Git and secret audit, clean-start verification of every suite, README walkthrough from a clean checkout. | "Do not invent functionality or results." "Do not claim production scalability without benchmarks." "Do not invent elapsed engineering hours." "Do not modify existing committed Flyway migrations." |
+| 10: search race fix and My Tickets | Reproduce the search debounce race in a deterministic Playwright test that fails before the fix, fix the cause, and keep Back/Forward, filters and accessibility. Add `GET /api/bookings` (paginated, newest first, the customer from the principal, no denormalization, indexes only in a new migration) and a My Tickets screen with loading, empty and error states. | "Fix the underlying issue, not the test timing." "No arbitrary sleeps or timing workarounds." "Never from a user-supplied customerId." "No passwords or bookings in browser storage." "Do not run docker compose down -v." "STOP after Task 10." |
+
+Task 10 was done by a local Cursor agent (Claude) on the owner's Mac against the owner's running
+Compose stack. Its Maven runs used the installed JDK 23 through `JAVA_HOME`, because the default
+`java` was JDK 17; nothing was installed system-wide.
 
 Context the agent worked from: `AGENTS.md`, the docs in `docs/`, the code, and the running stack.
-Its environment needed two VM-only fixes, neither of them committed:
+For Tasks 06–09, its environment needed two VM-only fixes, neither of them committed:
 - installing `docker-compose-v2`;
 - `sudo iptables-legacy -P FORWARD ACCEPT`, because a stale legacy `FORWARD DROP` policy blocked
   container-to-container traffic. Re-confirmed in the audit.
 
-## 7. Verification performed (Tasks 06–09)
+## 7. Verification performed (Tasks 06–10)
 
 | Task | Commands run by the AI agent | Result |
 |---|---|---|
@@ -135,6 +144,7 @@ Its environment needed two VM-only fixes, neither of them committed:
 | 08 | `npm test`; `npm run build`; `npx playwright test --repeat-each=5`; `docker compose down -v` + `up --build`; `npm run test:e2e` twice; `./mvnw -B clean verify` | 34/34; build OK; 15/15; healthy; 3/3 twice; 59/59 + 132/132 |
 | 08 follow-up | `npx tsc -b`; `npm run test:e2e` twice | OK; 3/3 twice |
 | 09 | The clean start, every suite, and the README steps in a fresh clone (details in `docs/test-strategy.md` and `docs/requirements-checklist.md` §10) | All passed |
+| 10 | The race test against the unfixed app, then with the fix (`--repeat-each=10`); `./mvnw -B clean verify`; `npm test`; `npm run build`; `docker compose up -d --build` (no `down -v`); `npx playwright test`, then with `--repeat-each=3`; `./run-tests.sh` | Failed 5/5, then 20/20; 64/64 + 142/142; 40/40; build OK; healthy, V10 applied, the hand-made booking kept; 6/6, then 18/18; exit 0 |
 
 A human re-run of these commands is not recorded in this document.
 

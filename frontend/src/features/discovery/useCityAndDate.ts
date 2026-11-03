@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router';
+import { useLocation, useSearchParams } from 'react-router';
 import type { City } from '../../api/types.ts';
 import { dateRange, isIsoDate, todayIn } from '../../lib/dates.ts';
 
@@ -12,6 +12,7 @@ const FALLBACK_ZONE = 'America/Chicago';
  */
 export function useCityAndDate(cities: City[] | undefined) {
   const [params, setParams] = useSearchParams();
+  const { pathname } = useLocation();
 
   const city = useMemo(() => {
     if (!cities || cities.length === 0) return undefined;
@@ -25,8 +26,15 @@ export function useCityAndDate(cities: City[] | undefined) {
   const date = isIsoDate(requestedDate) && requestedDate >= today ? requestedDate : today;
   const visibleDates = dates.includes(date) ? dates : [...dates, date];
 
+  /**
+   * React Router applies navigations in a React transition, so this page stays mounted for a
+   * moment after the browser has already moved to another entry. setParams navigates relative to
+   * the rendered page with replace, so a late call (e.g. the debounced search) would overwrite the
+   * entry the user just opened with this page. Updates from a page the user has left are dropped.
+   */
   const update = useCallback(
     (changes: Record<string, string | null>) => {
+      if (window.location.pathname !== pathname) return;
       setParams(
         (current) => {
           const next = new URLSearchParams(current);
@@ -39,7 +47,7 @@ export function useCityAndDate(cities: City[] | undefined) {
         { replace: true },
       );
     },
-    [setParams],
+    [setParams, pathname],
   );
 
   return {
