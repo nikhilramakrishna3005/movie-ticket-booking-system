@@ -196,7 +196,8 @@ function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
+      {/* Zero-minimum tracks make the 14-day date strip scroll instead of widening the grid over the screens column. */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]">
         <ScreensColumn
           theater={theater}
           details={details.data ?? []}

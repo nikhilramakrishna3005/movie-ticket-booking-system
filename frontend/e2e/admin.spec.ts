@@ -112,6 +112,35 @@ test('a showtime scheduled on the date being viewed appears in that schedule imm
   expect(showtimeId, `No free slot after ${MAX_ATTEMPTS} attempts`).not.toBeNull();
 });
 
+test('the screens and schedule columns never overlap at any viewport width', async ({ page }) => {
+  await page.goto('/admin');
+  await page.getByTestId('admin-sign-in').click();
+  await submitLogin(page, USERS.dallasAdmin);
+  // The 14-day date strip is what used to squeeze the screens column, so it must be on screen.
+  await expect(page.getByRole('radiogroup', { name: 'Show date' })).toBeVisible();
+  await expect(page.getByTestId('admin-screen-card').first()).toBeVisible();
+
+  const screens = page.getByRole('region', { name: 'Screens' });
+  const schedule = page.getByRole('region', { name: 'Showtimes' });
+  for (const width of [375, 768, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const screensBox = (await screens.boundingBox())!;
+    const scheduleBox = (await schedule.boundingBox())!;
+    const sideBySide = screensBox.x + screensBox.width <= scheduleBox.x;
+    const stacked = screensBox.y + screensBox.height <= scheduleBox.y;
+    expect(sideBySide || stacked, `columns overlap at ${width}px`).toBe(true);
+    expect(screensBox.width, `screens column width at ${width}px`).toBeGreaterThanOrEqual(Math.min(352, width - 32));
+
+    for (const card of await page.getByTestId('admin-screen-card').all()) {
+      const box = (await card.boundingBox())!;
+      expect(box.x, `screen card left edge at ${width}px`).toBeGreaterThanOrEqual(screensBox.x - 0.5);
+      expect(box.x + box.width, `screen card right edge at ${width}px`).toBeLessThanOrEqual(screensBox.x + screensBox.width + 0.5);
+    }
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `horizontal page overflow at ${width}px`).toBeLessThanOrEqual(0);
+  }
+});
+
 test('an admin cancels a showtime and a customer cannot book it', async ({ page, request }) => {
   const showtime = await createFreshShowtime(request, 'Parasite');
 
