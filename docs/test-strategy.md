@@ -1,9 +1,9 @@
 # Test Strategy
 
 > **Status: IMPLEMENTED.** This document describes the tests that exist in the repository and what
-> each suite proves. The counts are from the Task 14 final-audit run on 2026-11-03 (see
-> [Task 14 final audit](#task-14-final-audit-2026-11-03)). Earlier Task 13, Task 12, Task 11,
-> Task 10 and Task 09 final-audit runs are kept below it.
+> each suite proves. The counts are from the Task 15 run on 2026-11-03 (see
+> [Task 15 UI defect fixes](#task-15-ui-defect-fixes-2026-11-03)). Earlier Task 14, Task 13,
+> Task 12, Task 11, Task 10 and Task 09 final-audit runs are kept below it.
 
 ## Test levels
 
@@ -11,8 +11,8 @@
 |---|---|---|---|---|
 | Backend unit | JUnit 5 (Surefire) | `backend/src/test/java/**/*Test.java` | 66 | `cd backend && ./mvnw -B clean verify` |
 | Backend integration and concurrency | JUnit 5, Spring Boot, Testcontainers PostgreSQL 16 (Failsafe) | `backend/src/test/java/**/*IT.java` | 186 | (same command) |
-| Frontend unit | Node built-in test runner | `frontend/src/**/*.test.ts` | 53 | `cd frontend && npm test` |
-| End-to-end | Playwright, Chromium | `frontend/e2e/*.spec.ts` | 10 | `cd frontend && npm run test:e2e` (needs the Compose stack running) |
+| Frontend unit | Node built-in test runner | `frontend/src/**/*.test.ts` | 54 | `cd frontend && npm test` |
+| End-to-end | Playwright, Chromium | `frontend/e2e/*.spec.ts` | 12 | `cd frontend && npm run test:e2e` (needs the Compose stack running) |
 
 These counts are executed test cases, including parameterized and repeated cases, as reported
 by Surefire, Failsafe, Node and Playwright.
@@ -72,7 +72,7 @@ neither environment settings nor a stray `.only` can narrow the run.
 | `OutboxDeliveryIT` (10) | A confirmed booking writes an unpublished event; dispatch creates one inbox row and sets `published_at`. Re-dispatch does not duplicate. Crash after inbox write recovers without a second row. An interrupted claim is skipped until the lease expires, then delivers. A simulated consumer failure records `last_error` and retries after backoff. Two concurrent workers deliver six events once each. Two concurrent inbox inserts for one event commit one row (`ON CONFLICT`). After B reclaims, A's late ack and failure leave B's token in place and B can finish delivery. Decline creates neither event nor inbox. `GET /notifications` is 401/403 and Bob's list is empty while Alice sees her row. | architecture §9 |
 | `ApplicationIT` (2) | The application connects to PostgreSQL and health is `UP` with the database. | — |
 
-## Frontend unit tests (53)
+## Frontend unit tests (54)
 
 | File | Proves |
 |---|---|
@@ -80,11 +80,11 @@ neither environment settings nor a stray `.only` can narrow the run.
 | `src/features/tickets/history.test.ts` (4) | My Tickets pages are concatenated in order; a booking shifted onto the next page by a newer booking is not shown twice; whether another page exists; a ticket is "upcoming" until its showtime starts. |
 | `src/features/checkout/paymentFlow.test.ts` (7) | `UNKNOWN` is pending, never declined. A decline retires the key so the next try is a new attempt. Ambiguous failures keep the key. 401 asks for sign-in without dropping the attempt. |
 | `src/features/seats/selection.test.ts` (3) | Seats that became held or booked are dropped from the selection; exact price totals. |
-| `src/features/discovery/showtimes.test.ts` (4) | Grouping and ordering of search results; reading every page. |
+| `src/features/discovery/showtimes.test.ts` (5) | Grouping and ordering of search results; reading every page; the result summary says "1 showtime" for one and "0 showtimes" / "N showtimes" otherwise (Task 15 regression). |
 | `src/lib/lib.test.ts` (9) | Dates in the theater zone, DST arithmetic, countdown skew correction, formatting (including the ticket date), UUID generation. |
 | `src/features/admin/forms.test.ts` (10) | Showtime and screen drafts: missing fields, date/time/price bounds matching the server, premium rows at the back, name not required when replacing a layout, overlap/busy/taken-name/locked-layout and cancellation-blocked messages, `INVALID_REQUEST` field labels. |
 
-## End-to-end tests (10)
+## End-to-end tests (12)
 
 Playwright drives Chromium against the real Compose stack (nginx, Spring Boot, PostgreSQL). Each
 test creates its own showtime through `POST /api/admin/showtimes`, so tests are independent and
@@ -101,7 +101,9 @@ can run in parallel without a database reset. Selectors are `data-testid` only.
 | `admin.spec.ts`: a customer cannot open theater administration | Alice signing in at `/admin` sees the not-admin state; the header still has My Tickets, not Admin. | Product scope §3.7, AC-U2 |
 | `admin.spec.ts`: an admin schedules a showtime that then appears in public discovery | Dallas admin signs in at `/admin`, sees Starlight, schedules Parasite on Screen 1 in a far-future slot (retrying on overlap), sees it on the day's list, signs out, and finds the same showtime on Discover. No screen is created, so the owner's dashboard is not given extra screens. | Product scope §3.7 |
 | `admin.spec.ts`: a showtime scheduled on the date being viewed appears in that schedule immediately | Regression for the Task 14 defect: Dallas admin switches the dashboard to a far-future date, schedules Parasite on that same date (retrying on overlap), and the created showtime's card appears without changing dates. Failed against the unfixed dashboard. | Product scope §3.7 |
-| `admin.spec.ts`: an admin cancels a showtime and a customer cannot book it | Dallas admin cancels a freshly scheduled Parasite show from the dashboard. Public search omits it; the seat page shows it cancelled and the Hold button is disabled. | Product scope §3.7 |
+| `admin.spec.ts`: the screens and schedule columns never overlap at any viewport width | Regression for the Task 15 layout defect. With the 14-day date strip shown, bounding boxes at 375, 768, 1024, 1280 and 1440 px prove the Screens and Showtimes columns are side by side or stacked without overlap, the Screens column keeps its 22rem width (or the full width when stacked), every screen card stays inside it, and the page has no horizontal overflow. Failed against the unfixed dashboard. | Product scope §3.7 |
+| `admin.spec.ts`: cancelling a showtime needs confirmation: dismissing sends nothing, confirming cancels once | Regression for the Task 15 one-click cancel. The dialog names the movie, date, time and screen, and focus starts on "Keep showtime". Dismissing with "Keep showtime", Escape (focus returns to the card's button) and Enter sends no cancel request and the API still reports `SCHEDULED`. Double-clicking "Confirm cancellation" sends exactly one request, and the card and API report `CANCELLED`. Failed against the unfixed dashboard. | Product scope §3.7 |
+| `admin.spec.ts`: an admin cancels a showtime and a customer cannot book it | Dallas admin cancels a freshly scheduled Parasite show from the dashboard, confirming in the dialog. Public search omits it; the seat page shows it cancelled and the Hold button is disabled. | Product scope §3.7 |
 
 ### The search race regression
 
@@ -142,7 +144,8 @@ debounce, the search filters and Back/Forward are unchanged.
 - **Real payment providers.** All payment tests use the in-process simulator, whose ledger has
   properties real providers don't guarantee (architecture §6.7).
 - **Browser coverage.** E2E runs Chromium only. Timeout/`UNKNOWN` polling, hold expiry,
-  keyboard-only use and mobile viewports have no E2E test. The My Tickets empty, error and
+  keyboard-only use and mobile flows have no E2E test (the admin layout test only checks element
+  positions at 375–1440 px widths in desktop Chromium). The My Tickets empty, error and
   "Show older tickets" states have no E2E test; their logic is covered by `history.test.ts`. The `UNKNOWN` flow is covered by
   backend tests and frontend unit tests.
 - **Package boundaries.** These are enforced by review only (no ArchUnit).
@@ -150,6 +153,26 @@ debounce, the search filters and Back/Forward are unchanged.
   killing the process. Outbox interruption is simulated by setting `claimed_until`, by inserting
   an inbox row before `published_at`, and by a stale `claim_token` ack after another worker
   reclaims the row (`OutboxDeliveryIT`).
+
+## Task 15 UI defect fixes (2026-11-03)
+
+Run on the same MacBook (macOS 26.5.1) on branch `feature/task-15-ui-polish`, with OpenJDK 23.0.2
+(the build targets Java 21), Node 25.9.0, npm 11.12.1, Docker 28.5.1 and Compose 2.40.3. Frontend
+changes only; the existing Compose stack and its database were kept.
+
+| Command | Result |
+|---|---|
+| The two new admin Playwright tests against the unfixed frontend | Both failed: 645 px of horizontal page overflow at 375 px wide, and no confirmation dialog |
+| `cd frontend && npm run typecheck && npm test && npm run build` | Exit 0; 54/54; Vite warns that the main chunk is over 500 kB |
+| `docker compose up -d --build --wait --no-deps frontend` | Exit 0; backend and postgres not recreated; Flyway V13; booking `9956RB4M` still `CONFIRMED` |
+| `./run-tests.sh` (all suites, stack running) | Exit 0 in 85 s. Backend 66 unit and 186 integration (0 failures, 0 errors, 0 skipped; Maven 1:04 min), frontend 54/54 (0 skipped), Playwright 12 passed in 15.0 s: 318 tests in total |
+| The two new admin tests with `--repeat-each=3` | 6/6 |
+
+Defects fixed, each with a regression test: the admin Screens column was squeezed (0 px at
+1024 px) and overlapped the schedule, and the stacked layout overflowed horizontally at 375 and
+768 px; "Cancel showtime" acted on one click; Discover said "1 showtimes". A cancellation refused
+with 409 `SHOWTIME_HAS_ACTIVE_HOLDS` was checked by hand through the new dialog: the existing card
+message is shown and the showtime stays scheduled.
 
 ## Task 14 final audit (2026-11-03)
 

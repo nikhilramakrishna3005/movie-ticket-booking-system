@@ -198,11 +198,11 @@ flowchart LR
 |---|---|---|---|
 | Backend unit (JUnit 5) | 66 | Hold and payment state rules, paging, scheduling and DST, access policy, security filter chain | `cd backend && ./mvnw -B clean verify` |
 | Backend integration (Spring Boot + Testcontainers PostgreSQL 16) | 186 | Constraints, holds, payments, concurrency, discovery, admin, authorization, outbox delivery | (same command) |
-| Frontend unit (Node test runner) | 53 | API client retries and keys, payment-outcome handling, seat selection, ticket paging, admin forms | `cd frontend && npm ci && npm test` |
-| End-to-end (Playwright, Chromium) | 10 | Booking, decline then retry, seat conflict, search race, My Tickets, admin scheduling and cancellation | `cd frontend && npm run test:e2e` (stack running) |
+| Frontend unit (Node test runner) | 54 | API client retries and keys, payment-outcome handling, seat selection, ticket paging, admin forms, Discover result wording | `cd frontend && npm ci && npm test` |
+| End-to-end (Playwright, Chromium) | 12 | Booking, decline then retry, seat conflict, search race, My Tickets, admin scheduling and cancellation, cancel confirmation, admin layout at 375–1440 px | `cd frontend && npm run test:e2e` (stack running) |
 
-Latest results: **all 315 tests passed with 0 skipped** on 2026-11-03 (Task 14 final audit,
-macOS, JDK 23 targeting Java 21, Node 25.9). Details and earlier runs are in
+Latest results: **all 318 tests passed with 0 skipped** on 2026-11-03 (Task 15 UI defect fixes,
+`./run-tests.sh`, macOS, JDK 23 targeting Java 21, Node 25.9). Details and earlier runs are in
 [`docs/test-strategy.md`](docs/test-strategy.md).
 
 How the tests stay meaningful and deterministic:

@@ -16,7 +16,7 @@
 |---|---|---|---|
 | No seat is ever sold twice | Complete | Ordered `FOR UPDATE` locks in `HoldService` and `CheckoutTransactions`; `booking_seat UNIQUE (showtime_id, seat_id)` | `HoldConcurrencyIT`, `PaymentConcurrencyIT`, `DatabaseSchemaIT.aSeatCannotBeBookedTwiceForTheSameShowtime`, E2E decline-retry test |
 | An expired hold is never converted into a booking | Complete | TX3 validity check under lock with `clock.instant()`; void path in `CheckoutService` | `PaymentApiIT.captureArrivingAfterHoldExpiryIsVoidedEvenThoughTheSeatsAreFree`, `…unknownPaymentResolvedAfterHoldExpiryIsVoidedAndBooksNothing` |
-| Behavior proven by automated tests, especially concurrency | Complete | 66 + 186 backend, 53 frontend unit and 10 E2E tests, all passing | `docs/test-strategy.md` |
+| Behavior proven by automated tests, especially concurrency | Complete | 66 + 186 backend, 54 frontend unit and 12 E2E tests (318 in total), all passing | `docs/test-strategy.md` |
 | Explicit tradeoffs | Complete | ADRs 0001–0003; architecture §6.7 (provider limits), §7 (multi-instance clock), §12 (scale); README known limitations | — |
 | Clear module ownership | Complete (by convention) | Packages `catalog`, `theater`, `booking`, `payment`, `admin`, `security` (plus `config`) | Enforced by review only; no ArchUnit test (as `AGENTS.md` §3 allows) |
 | 10-hour budget | Not tracked | — | Time was not tracked precisely, so no actual hours are claimed (`docs/implementation-plan.md` §6) |
@@ -31,7 +31,7 @@
 | React frontend | Complete | React 19 + TypeScript + Vite (`frontend/`) |
 | Docker Compose, whole system local, no cloud dependencies | Complete | `docker-compose.yml` (postgres, backend, frontend). After the images are built, no hosted service is used. Building downloads base images and Maven and npm packages once. |
 | JUnit 5, Spring Boot integration tests, Testcontainers PostgreSQL | Complete | 186 `*IT` tests on `postgres:16-alpine` |
-| Playwright, at least 2 tests | Complete | 10 tests in `frontend/e2e/` |
+| Playwright, at least 2 tests | Complete | 12 tests in `frontend/e2e/` |
 | Simulated in-process payment (success, failure, timeout) | Complete | `SimulatedPaymentProvider` with its own ledger table; scenarios `SUCCESS` / `DECLINE` / `TIMEOUT` |
 | Spring Security, HTTP Basic, seeded demo users | Complete | `SecurityConfig`; V8 demo users and V11 Playwright customers (BCrypt hashes) |
 | Injectable UTC `Clock` for all expiry logic | Complete | `ClockConfig`. No `Instant.now()`, `LocalDateTime.now()` or SQL `NOW()` in `backend/src/main` (checked with `rg`). Tests use `MutableClock`. |
@@ -129,7 +129,7 @@
 | 3.4 Pay and confirm | Complete | Success, decline with retry, timeout with polling, late-capture void, at most 3 attempts |
 | 3.5 Abandonment and release | Complete | Lazy expiry; release blocked while a payment is in flight |
 | 3.6 View my bookings | Complete (Task 10) | `GET /api/bookings` (own confirmed bookings, newest first, paginated) and the My Tickets screen at `/tickets`. `BookingHistoryApiIT`, `history.test.ts`, `my-tickets.spec.ts`. Task 13 adds the local inbox (`GET /api/notifications`, `/notifications`) from the outbox relay. |
-| 3.7 Admin theaters, screens and showtimes | Complete (Task 11–12) | Assigned-theater APIs, screen add / layout replace-before-first-showtime, `/admin` dashboard, showtime cancellation (409 when bookings, unresolved payments or live holds exist). `AdminTheaterApiIT`, `ShowtimeCancellationIT`, `forms.test.ts`, `admin.spec.ts`. |
+| 3.7 Admin theaters, screens and showtimes | Complete (Task 11–12) | Assigned-theater APIs, screen add / layout replace-before-first-showtime, `/admin` dashboard, showtime cancellation (409 when bookings, unresolved payments or live holds exist; confirmed in a dialog since Task 15). `AdminTheaterApiIT`, `ShowtimeCancellationIT`, `forms.test.ts`, `admin.spec.ts`. |
 
 ## 9. Required documentation (`docs/implementation-plan.md` Phase 7)
 
@@ -259,8 +259,9 @@ Deliberately omitted features are listed, with reasons and what was built instea
   attempt then captures, the show has bookings and cannot be cancelled; Cinéva does not void
   or refund it. Live holds are also refused rather than force-invalidated.
 - E2E tests do not cover timeout/`UNKNOWN` polling, hold expiry, the notification inbox,
-  keyboard-only use or mobile viewports; these are covered at the API or unit level, or not at
-  all (`docs/test-strategy.md`). Task 14 exercised hold expiry (real 8-minute TTL) and the inbox
+  keyboard-only use or mobile flows (the Task 15 admin layout test only checks element positions
+  at 375–1440 px widths); these are covered at the API or unit level, or not at all
+  (`docs/test-strategy.md`). Task 14 exercised hold expiry (real 8-minute TTL) and the inbox
   manually against the running stack.
 - The three UI defects found in Task 14 were fixed in Task 15, each with a regression test: the
   admin Screens and Schedule columns now stack below 1280 px and no longer overlap (the stacked
