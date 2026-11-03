@@ -1,14 +1,14 @@
 # Requirements Checklist
 
-> **Status: FINAL AUDIT, 2026-11-02; updated for Task 10 on 2026-11-03.** This maps every requirement in `AGENTS.md` (the assignment
+> **Status: FINAL AUDIT, 2026-11-02; updated for Tasks 10–12 on 2026-11-03.** This maps every requirement in `AGENTS.md` (the assignment
 > constraints) and every acceptance criterion in `docs/product-scope.md` to the code, tests and
 > documentation that address it. Status values:
 > - **Complete:** implemented and covered by a passing automated test, or verifiable in the code.
 > - **Partial:** some of it is implemented; the gap is stated.
 > - **Not implemented:** not built, and stated as such.
 >
-> The test results referred to are from the Task 10 run in `docs/test-strategy.md`; §10 also
-> keeps the final-audit results of 2026-11-02.
+> The test results referred to are from the Task 12 run in `docs/test-strategy.md`; §10 also
+> keeps the Task 11, Task 10 and final-audit results.
 
 ## 1. Project goals (`AGENTS.md` §1)
 
@@ -16,7 +16,7 @@
 |---|---|---|---|
 | No seat is ever sold twice | Complete | Ordered `FOR UPDATE` locks in `HoldService` and `CheckoutTransactions`; `booking_seat UNIQUE (showtime_id, seat_id)` | `HoldConcurrencyIT`, `PaymentConcurrencyIT`, `DatabaseSchemaIT.aSeatCannotBeBookedTwiceForTheSameShowtime`, E2E decline-retry test |
 | An expired hold is never converted into a booking | Complete | TX3 validity check under lock with `clock.instant()`; void path in `CheckoutService` | `PaymentApiIT.captureArrivingAfterHoldExpiryIsVoidedEvenThoughTheSeatsAreFree`, `…unknownPaymentResolvedAfterHoldExpiryIsVoidedAndBooksNothing` |
-| Behavior proven by automated tests, especially concurrency | Complete | 64 + 142 backend, 40 frontend unit and 6 E2E tests, all passing | `docs/test-strategy.md` |
+| Behavior proven by automated tests, especially concurrency | Complete | 64 + 174 backend, 52 frontend unit and 9 E2E tests, all passing | `docs/test-strategy.md` |
 | Explicit tradeoffs | Complete | ADRs 0001–0003; architecture §6.7 (provider limits), §7 (multi-instance clock), §12 (scale); README known limitations | — |
 | Clear module ownership | Complete (by convention) | Packages `catalog`, `theater`, `booking`, `payment`, `admin`, `security` (plus `config`) | Enforced by review only; no ArchUnit test (as `AGENTS.md` §3 allows) |
 | 10-hour budget | Not tracked | — | Time was not tracked precisely, so no actual hours are claimed (`docs/implementation-plan.md` §6) |
@@ -25,15 +25,15 @@
 
 | Requirement | Status | Implementation / evidence |
 |---|---|---|
-| Java 17+, Spring Boot, REST/JSON | Complete | Java 21, Spring Boot 3.5 (`backend/pom.xml`); 14 endpoints (`docs/api.md`) |
+| Java 17+, Spring Boot, REST/JSON | Complete | Java 21, Spring Boot 3.5 (`backend/pom.xml`); 21 listed endpoints including health (`docs/api.md`) |
 | PostgreSQL as the authoritative seat owner | Complete | `show_seat`, `seat_hold` and `booking_seat` in PostgreSQL 16; no cache |
-| Flyway migrations, no `ddl-auto` generation | Complete | V1–V10; `spring.jpa.hibernate.ddl-auto: validate`; `DatabaseSchemaIT.allMigrationsApplyInOrder` |
+| Flyway migrations, no `ddl-auto` generation | Complete | V1–V11; `spring.jpa.hibernate.ddl-auto: validate`; `DatabaseSchemaIT.allMigrationsApplyInOrder` |
 | React frontend | Complete | React 19 + TypeScript + Vite (`frontend/`) |
 | Docker Compose, whole system local, no cloud dependencies | Complete | `docker-compose.yml` (postgres, backend, frontend). After the images are built, no hosted service is used. Building downloads base images and Maven and npm packages once. |
-| JUnit 5, Spring Boot integration tests, Testcontainers PostgreSQL | Complete | 142 `*IT` tests on `postgres:16-alpine` |
-| Playwright, at least 2 tests | Complete | 6 tests in `frontend/e2e/` |
+| JUnit 5, Spring Boot integration tests, Testcontainers PostgreSQL | Complete | 174 `*IT` tests on `postgres:16-alpine` |
+| Playwright, at least 2 tests | Complete | 9 tests in `frontend/e2e/` |
 | Simulated in-process payment (success, failure, timeout) | Complete | `SimulatedPaymentProvider` with its own ledger table; scenarios `SUCCESS` / `DECLINE` / `TIMEOUT` |
-| Spring Security, HTTP Basic, seeded demo users | Complete | `SecurityConfig`; V8 BCrypt users |
+| Spring Security, HTTP Basic, seeded demo users | Complete | `SecurityConfig`; V8 demo users and V11 Playwright customers (BCrypt hashes) |
 | Injectable UTC `Clock` for all expiry logic | Complete | `ClockConfig`. No `Instant.now()`, `LocalDateTime.now()` or SQL `NOW()` in `backend/src/main` (checked with `rg`). Tests use `MutableClock`. |
 | Redis, Kafka, Solr deferred with ADRs | Complete | None of them is in `pom.xml`, `package.json` or `docker-compose.yml`. ADRs 0001–0003 were accepted by the human owner on 2026-11-02. |
 
@@ -102,7 +102,7 @@
 | AC-H7 input validation | Complete | `HoldApiIT.duplicateSeatIdsAreListed`, `…unknownSeatsAndSeatsOfAnotherScreenAreRejectedWithNothingHeld`, `…tenSeatsIsTheMaximumThatCanBeHeld` |
 | AC-H8 one active hold per showtime | Complete | `HoldApiIT.customerHasAtMostOneActiveHoldPerShowtime`, `HoldConcurrencyIT.sameCustomerRacingTwoHoldsForOneShowtimeGetsExactlyOne` |
 | AC-H9 no holds on started or cancelled shows | Complete | `HoldApiIT.startedOrCancelledShowtimeCannotBeHeld` |
-| AC-H10 release, ownership, blocked during payment | Partial | Release, 404 for others and the in-flight block are tested (`HoldApiIT`, `PaymentApiIT.holdCannotBeReleasedOrPaidAgainWhileAPaymentIsInFlight`). The "view a hold" endpoint (`GET /holds/{id}`) is not implemented. |
+| AC-H10 release, ownership, blocked during payment | Complete | Release, 404 for others and the in-flight block (`HoldApiIT`, `PaymentApiIT`). `GET /holds/{id}` returns owner-only current state without extending expiry (`HoldApiIT.ownerCanReadAHoldWithoutExtendingIt` and the expired/converted/other-customer cases). |
 | AC-B1 success: one booking, seats booked, outbox event | Complete | `PaymentApiIT.successfulPaymentConfirmsOneBookingAndBooksTheSeats` |
 | AC-B2 decline: no booking, hold stays | Complete | `PaymentApiIT.declineCreatesNoBookingAndARetryNeedsANewKey`; E2E decline test |
 | AC-B3 retry with a new key; refused near expiry | Complete | Same test; `PaymentApiIT.paymentNeedsAnActiveHoldWithEnoughTimeLeft` |
@@ -129,7 +129,7 @@
 | 3.4 Pay and confirm | Complete | Success, decline with retry, timeout with polling, late-capture void, at most 3 attempts |
 | 3.5 Abandonment and release | Complete | Lazy expiry; release blocked while a payment is in flight |
 | 3.6 View my bookings | Complete (Task 10) | `GET /api/bookings` (own confirmed bookings, newest first, paginated) and the My Tickets screen at `/tickets`. `BookingHistoryApiIT`, `history.test.ts`, `my-tickets.spec.ts`. |
-| 3.7 Admin theaters, screens and showtimes | Complete (Task 11) | Assigned-theater APIs, screen add / layout replace-before-first-showtime, `/admin` dashboard. `AdminTheaterApiIT`, `forms.test.ts`, `admin.spec.ts`. Showtime cancellation is still not implemented. |
+| 3.7 Admin theaters, screens and showtimes | Complete (Task 11–12) | Assigned-theater APIs, screen add / layout replace-before-first-showtime, `/admin` dashboard, showtime cancellation (409 when bookings, unresolved payments or live holds exist). `AdminTheaterApiIT`, `ShowtimeCancellationIT`, `forms.test.ts`, `admin.spec.ts`. |
 
 ## 9. Required documentation (`docs/implementation-plan.md` Phase 7)
 
@@ -139,7 +139,7 @@
 | Product scope and deferred features | Complete | `docs/product-scope.md` (§4 non-goals, §8 delivery status) |
 | Roles and permissions matrix | Complete | `docs/architecture.md` §8.1 (marked as implemented or not) |
 | Architecture diagram and booking/payment flow | Complete | `docs/architecture.md` §2, §6.3, §6.4 |
-| ERD matching V1–V10 | Complete | `docs/data-model.md` |
+| ERD matching V1–V11 | Complete | `docs/data-model.md` |
 | API reference | Complete | `docs/api.md` |
 | Redis, Kafka and Solr ADRs | Complete (accepted 2026-11-02) | `docs/decisions/0001`–`0003` |
 | Test strategy | Complete | `docs/test-strategy.md` |
@@ -185,10 +185,25 @@ A clean `docker compose down -v` start was not run for Task 10, to keep the loca
 
 A clean `docker compose down -v` start was not run for Task 11, to keep the local database.
 
+**Task 12 (2026-11-03, same Mac, existing Compose stack and database kept):**
+
+| Check | Result |
+|---|---|
+| Backend: `./mvnw -B clean verify` (JDK 23) | 64/64 unit tests, 174/174 integration tests, BUILD SUCCESS |
+| Frontend: `npm test`; `npm run build` | 52/52 pass; build succeeds |
+| Stack rebuilt in place: `docker compose up -d --build --wait` (no `down -v`) | All three services healthy; Flyway applied V11; booking `9956RB4M` still `CONFIRMED` |
+| Playwright against the running stack | 9/9, then 27/27 with `--repeat-each=3` |
+| Single runner: `./run-tests.sh` against the running stack | Exit 0: backend 64/64 unit and 174/174 integration, frontend 52/52, Playwright 9/9, no skipped tests |
+
+A clean `docker compose down -v` start was not run for Task 12, to keep the local database.
+
 ## 11. Remaining gaps (honest summary)
 
-- Not implemented: `GET /holds/{id}`, showtime cancellation,
-  background workers (outbox relay, cleanup, scheduled reconciliation).
+- Not implemented: background workers (outbox relay, cleanup, scheduled reconciliation);
+  customer booking cancellation / refunds.
+- Showtime cancellation refuses while a simulated payment is `PENDING` or `UNKNOWN`. If that
+  attempt then captures, the show has bookings and cannot be cancelled; Cinéva does not void
+  or refund it. Live holds are also refused rather than force-invalidated.
 - E2E tests do not cover timeout/`UNKNOWN` polling, hold expiry, keyboard-only use or mobile
   viewports; these are covered at the API or unit level, or not at all (`docs/test-strategy.md`).
 - No load testing, so no scalability claim.
