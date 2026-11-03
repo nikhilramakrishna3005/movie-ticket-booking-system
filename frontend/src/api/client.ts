@@ -2,6 +2,7 @@ import type {
   ApiErrorBody,
   BookingConfirmation,
   BookingHistoryPage,
+  CancelledShowtime,
   City,
   CreatedShowtime,
   CurrentUser,
@@ -185,6 +186,8 @@ export function createApiClient(options: ApiClientOptions) {
     releaseHold: async (holdId: string): Promise<void> => {
       await request<void>(`/api/holds/${holdId}`, { method: 'DELETE', retryable: true });
     },
+    /** Does not extend the hold. Safe to retry: GET is idempotent and does not write. */
+    getHold: (holdId: string) => request<Hold>(`/api/holds/${holdId}`, { retryable: true }),
     pay: (holdId: string, scenario: PaymentScenario, idempotencyKey: string) =>
       request<PaymentResponse>(`/api/holds/${holdId}/payment`, {
         method: 'POST',
@@ -215,6 +218,9 @@ export function createApiClient(options: ApiClientOptions) {
       }),
     createShowtime: (body: NewShowtimeRequest) =>
       request<CreatedShowtime>('/api/admin/showtimes', { method: 'POST', body, retryable: false }),
+    /** Idempotent: cancelling an already cancelled showtime returns the same body. */
+    cancelShowtime: (showtimeId: number) =>
+      request<CancelledShowtime>(`/api/admin/showtimes/${showtimeId}/cancel`, { method: 'POST', retryable: true }),
   };
 }
 

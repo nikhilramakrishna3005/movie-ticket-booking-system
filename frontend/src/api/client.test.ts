@@ -165,4 +165,31 @@ describe('api client', () => {
     assert.equal(user.username, 'bob');
     assert.equal(header(calls[0]!, 'Authorization'), `Basic ${btoa('bob:secret')}`);
   });
+
+  it('loads a hold by id without treating the GET as a write', async () => {
+    const hold = { holdId: 'h1', showtimeId: 8, seatIds: [1], status: 'ACTIVE', expiresAt: '2026-11-03T12:08:00Z' };
+    const { calls, impl } = fakeFetch([json(200, hold)]);
+    const api = createApiClient({ fetch: impl, getCredentials: () => ({ username: 'alice', password: 'pw' }) });
+
+    const response = await api.getHold('h1');
+
+    assert.equal(response.data.status, 'ACTIVE');
+    assert.equal(calls[0]!.url, '/api/holds/h1');
+    assert.equal(calls[0]!.init.method, 'GET');
+  });
+
+  it('retries an idempotent showtime cancellation after a gateway error', async () => {
+    const { calls, impl } = fakeFetch([
+      json(503, { code: 'HTTP_503', message: 'busy', details: null }),
+      json(200, { showtimeId: 9, theaterId: 2, screenId: 1, status: 'CANCELLED' }),
+    ]);
+    const api = createApiClient({ fetch: impl, getCredentials: () => ({ username: 'admin.dallas', password: 'pw' }), sleep: noSleep });
+
+    const response = await api.cancelShowtime(9);
+
+    assert.equal(response.data.status, 'CANCELLED');
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0]!.url, '/api/admin/showtimes/9/cancel');
+    assert.equal(calls[0]!.init.method, 'POST');
+  });
 });

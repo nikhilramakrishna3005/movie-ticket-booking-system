@@ -18,7 +18,7 @@ test('a customer books seats and the booked seats become unavailable', async ({ 
 
   // Anonymous visitors are asked to sign in when they try to hold seats; the hold follows the sign-in.
   await page.getByTestId('continue-button').click();
-  await submitLogin(page, USERS.alice);
+  await submitLogin(page, USERS.e2eAlice);
   await expect(page).toHaveURL(/\/checkout\/[0-9a-f-]{36}$/);
   await expect(page.getByTestId('checkout-page')).toBeVisible();
   await expect(page.getByTestId('hold-countdown')).toBeVisible();
@@ -42,7 +42,7 @@ test('a customer books seats and the booked seats become unavailable', async ({ 
   await expect(page.getByTestId('ticket-total')).toHaveText(expectedTotal);
 
   const bookingId = await confirmation.getAttribute('data-booking-id');
-  const booking = await bookingFor(request, USERS.alice, bookingId!);
+  const booking = await bookingFor(request, USERS.e2eAlice, bookingId!);
   expect(booking.status).toBe('CONFIRMED');
   expect(booking.reference).toBe(await page.getByTestId('booking-reference').textContent());
 
@@ -71,7 +71,7 @@ test('a declined payment books nothing and a retry with a new attempt books exac
 
   await openShowtimeFromDiscovery(page, showtime);
   await page.getByTestId('nav-login-button').click();
-  await submitLogin(page, USERS.alice);
+  await submitLogin(page, USERS.e2eAlice);
   await selectSeats(page, seats);
   await expect(page.getByTestId('total-price')).toHaveText(expectedTotal);
   await page.getByTestId('continue-button').click();
@@ -113,7 +113,7 @@ test('a declined payment books nothing and a retry with a new attempt books exac
   expect(finalSeats.filter((s) => s.status === 'BOOKED').map(seatName).sort()).toEqual(seats);
   expect(finalSeats.filter((s) => s.status === 'HELD')).toEqual([]);
   const bookingId = await page.getByTestId('booking-confirmation').getAttribute('data-booking-id');
-  const booking = await bookingFor(request, USERS.alice, bookingId!);
+  const booking = await bookingFor(request, USERS.e2eAlice, bookingId!);
   expect(booking.status).toBe('CONFIRMED');
   expect(booking.seats.map(seatName).sort()).toEqual(seats);
 });

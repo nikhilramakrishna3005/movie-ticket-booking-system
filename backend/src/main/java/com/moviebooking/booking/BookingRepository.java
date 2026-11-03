@@ -11,6 +11,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     Optional<Booking> findByPaymentAttemptId(UUID paymentAttemptId);
 
+    Optional<Booking> findByHoldId(UUID holdId);
+
     /** Served by {@code booking_customer_history_idx} when sorted by created_at and id, both descending. */
     Page<Booking> findByCustomerIdAndStatus(long customerId, String status, Pageable pageable);
 }

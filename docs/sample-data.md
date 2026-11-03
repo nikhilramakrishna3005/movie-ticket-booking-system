@@ -21,10 +21,11 @@ rows. It does not depend on the date the migrations run, and it contains no `NOW
 | Showtimes | 1,080: every screen, every day, 2 shows per day |
 | Seat inventory (`show_seat`) | 54,000 rows, all `AVAILABLE`. Prices: $12.50 standard, $16.00 premium. |
 
-**Users** are seeded separately by `V8__demo_users.sql`: two customers (`alice`, `bob`) and two
-theater admins, `admin.dallas` (assigned to Starlight Cinemas Downtown) and `admin.houston`
-(assigned to Bayou Picture House). Their passwords are fictional, public, and listed in the
-README's local-only demo accounts section; only BCrypt hashes are stored.
+**Users** are seeded by `V8__demo_users.sql`: two customers (`alice`, `bob`) and two theater
+admins, `admin.dallas` (assigned to Starlight Cinemas Downtown) and `admin.houston` (assigned to
+Bayou Picture House). `V11__e2e_test_users.sql` adds Playwright-only customers `e2e.alice` and
+`e2e.bob` so automated booking tests do not write into Alice and Bob's My Tickets. Passwords are
+fictional, public, and listed in the README; only BCrypt hashes are stored.
 
 ## Validity window for the live demo
 

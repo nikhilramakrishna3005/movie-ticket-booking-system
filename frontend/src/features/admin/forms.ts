@@ -133,6 +133,12 @@ export function describeAdminError(error: unknown): string {
         return 'A screen with that name already exists in this theater.';
       case 'SCREEN_HAS_SHOWTIMES':
         return 'This screen already has showtimes, so its seating plan can no longer change.';
+      case 'SHOWTIME_HAS_BOOKINGS':
+        return 'This showtime already has confirmed bookings, so it cannot be cancelled. Cinéva does not refund those tickets.';
+      case 'SHOWTIME_HAS_UNRESOLVED_PAYMENTS':
+        return 'A payment for this showtime is still in progress. Wait for it to settle; Cinéva will not cancel over an unresolved charge.';
+      case 'SHOWTIME_HAS_ACTIVE_HOLDS':
+        return 'Customers still have seats on hold. Wait until those holds are released or expire, then try again.';
       case 'INVALID_REQUEST': {
         const fields = listedFields(error);
         if (fields.length > 0) {

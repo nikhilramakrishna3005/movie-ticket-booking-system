@@ -286,3 +286,10 @@ export interface CreatedShowtime {
   timeZone: string;
   seatCount: number;
 }
+
+export interface CancelledShowtime {
+  showtimeId: number;
+  theaterId: number;
+  screenId: number;
+  status: ShowtimeStatus;
+}

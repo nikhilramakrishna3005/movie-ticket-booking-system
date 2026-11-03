@@ -75,6 +75,24 @@ public class TheaterService {
         return showtimes.findById(showtimeId).orElseThrow(ResourceNotFoundException::new);
     }
 
+    /**
+     * Locks the showtime row so cancellation and a new hold cannot commit together. Callers must
+     * already have set the transaction-local {@code lock_timeout}.
+     */
+    @Transactional
+    public Showtime lockShowtime(long showtimeId) {
+        return showtimes.lockById(showtimeId).orElseThrow(ResourceNotFoundException::new);
+    }
+
+    public void markCancelled(Showtime showtime) {
+        showtime.cancel();
+    }
+
+    public CancelledShowtime cancelledView(Showtime showtime) {
+        long theaterId = findScreen(showtime.getScreenId()).orElseThrow(ResourceNotFoundException::new).getTheaterId();
+        return new CancelledShowtime(showtime.getId(), theaterId, showtime.getScreenId(), showtime.getStatus());
+    }
+
     public ShowtimeDetails getShowtimeDetails(long showtimeId) {
         ShowtimeDetails details = getShowtimeDetails(List.of(showtimeId)).get(showtimeId);
         if (details == null) {

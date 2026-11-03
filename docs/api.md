@@ -26,12 +26,14 @@
 | `GET /api/showtimes/{id}` | anyone | 200 detail | 404 |
 | `GET /api/showtimes/{id}/seats` | anyone | 200 seat map | 404 |
 | `POST /api/showtimes/{id}/holds` | customer | 201 hold | 400 `INVALID_REQUEST` / `INVALID_SEATS`; 404; 409 `SEATS_UNAVAILABLE` / `SEATS_BUSY` / `ACTIVE_HOLD_EXISTS` / `SHOWTIME_CLOSED` |
+| `GET /api/holds/{holdId}` | customer (owner) | 200 hold | 404 (not yours or unknown) |
 | `DELETE /api/holds/{holdId}` | customer (owner) | 204 | 404 (not yours or unknown); 409 `PAYMENT_IN_PROGRESS` / `HOLD_CONVERTED` |
 | `POST /api/holds/{holdId}/payment` | customer (owner) | 201 booked; 202 `UNKNOWN` | 400; 402 `PAYMENT_DECLINED`; 404; 409 `PAYMENT_VOIDED` / `PAYMENT_IN_PROGRESS` / `HOLD_EXPIRED` / `HOLD_NOT_ACTIVE` / `HOLD_TOO_CLOSE_TO_EXPIRY` / `TOO_MANY_ATTEMPTS` / `SEATS_BUSY`; 422 `IDEMPOTENCY_KEY_REUSED` |
 | `GET /api/payments/{paymentId}` | customer (owner) | 200 payment | 404 |
 | `GET /api/bookings` | customer (own bookings only) | 200 page | 400 `INVALID_REQUEST` |
 | `GET /api/bookings/{bookingId}` | customer (owner) | 200 booking | 404 |
 | `POST /api/admin/showtimes` | theater admin, assigned theaters only | 201 created showtime | 400 `INVALID_REQUEST` / `INVALID_START_TIME`; 403; 409 `SHOWTIME_OVERLAP` / `SCREEN_BUSY` |
+| `POST /api/admin/showtimes/{id}/cancel` | theater admin, assigned | 200 cancelled | 403; 404; 409 `SHOWTIME_HAS_BOOKINGS` / `SHOWTIME_HAS_UNRESOLVED_PAYMENTS` / `SHOWTIME_HAS_ACTIVE_HOLDS` |
 | `GET /api/admin/theaters` | theater admin | 200 assigned theaters | 401; 403 |
 | `GET /api/admin/theaters/{id}/showtimes` | theater admin, assigned | 200 day's schedule | 400 `INVALID_REQUEST`; 403 |
 | `POST /api/admin/theaters/{id}/screens` | theater admin, assigned | 201 screen | 400 `INVALID_REQUEST`; 403; 409 `SCREEN_NAME_TAKEN` |
@@ -45,8 +47,8 @@ Rules for every protected endpoint:
 - Another customer's hold, payment or booking: 404 `NOT_FOUND`, so their IDs are not revealed.
 
 **Designed but not implemented:**
-- `GET /api/holds/{id}`
-- Showtime cancellation
+- Background workers (outbox relay, hold sweeper, scheduled payment reconciliation)
+- Customer booking cancellation / refunds
 
 ## Errors
 
@@ -190,6 +192,23 @@ curl -u alice:alice-demo-pass -H 'Content-Type: application/json' \
 | The showtime has started or is cancelled | 409 `SHOWTIME_CLOSED` |
 | A seat lock is not acquired within 2 s | 409 `SEATS_BUSY` (retryable). Nothing is held. |
 
+### `GET /api/holds/{holdId}`
+
+Owner only. Another customer's hold, or an unknown id, is 404. The stored expiry is not
+extended. An ACTIVE row whose `expiresAt` is not after the injected Clock is returned as
+`EXPIRED` without writing the row. Converted holds include the booked seat ids; released holds
+that no longer own inventory return an empty `seatIds` list. The body is the same shape as
+create-hold and does not include payment fields.
+
+```json
+{"holdId":"db9e0b24-fb97-4dee-8bce-90eec12c20e2","showtimeId":1081,"seatIds":[261,262],
+ "status":"ACTIVE","expiresAt":"2026-11-02T21:52:48.129131Z"}
+```
+
+Reload recovery in the React checkout uses this endpoint after the customer signs in again.
+Credentials stay in memory only, so a reload always asks for the password; this GET does not
+change that.
+
 ### `DELETE /api/holds/{holdId}`
 
 - Releases the hold: 204. Releasing an already expired or released hold is also 204.
@@ -325,6 +344,31 @@ Field rules:
 - `languageCode` is two lower-case letters.
 - `startsAtLocal` has whole minutes.
 - Prices are positive, have at most 2 decimals, and are at most 1000.
+
+### `POST /api/admin/showtimes/{id}/cancel`
+
+Marks the showtime `CANCELLED`. Seat inventory, holds and bookings are not deleted. Repeating
+the call on an already cancelled showtime is 200 with the same body. Public search omits
+cancelled shows; the admin schedule still lists them.
+
+Cancellation is refused, with nothing changed, when:
+
+| Situation | Response |
+|---|---|
+| Confirmed bookings (BOOKED seats) | 409 `SHOWTIME_HAS_BOOKINGS` (`details.bookedSeats`) |
+| A payment attempt is `PENDING` or `UNKNOWN` | 409 `SHOWTIME_HAS_UNRESOLVED_PAYMENTS` (`details.inFlightPayments`) |
+| An unexpired ACTIVE hold | 409 `SHOWTIME_HAS_ACTIVE_HOLDS` (`details.activeHolds`) |
+| Theater the admin is not assigned to | 403 `FORBIDDEN` |
+| Unknown showtime id | 404 `NOT_FOUND` |
+
+Expired ACTIVE holds are marked `EXPIRED` and their seats released in the cancelling
+transaction. Live holds are not invalidated. An in-flight simulated capture is never voided by
+this endpoint: the admin must wait until the attempt settles. If it then books, cancellation
+stays blocked.
+
+```json
+{"showtimeId":1081,"theaterId":2,"screenId":1,"status":"CANCELLED"}
+```
 
 ### `GET /api/admin/theaters`
 

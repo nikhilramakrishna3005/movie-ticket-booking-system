@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { CalendarDays, Clapperboard, Lock, LogIn, Plus, Sparkles } from 'lucide-react';
+import { Ban, CalendarDays, Clapperboard, Lock, LogIn, Plus, Sparkles } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { ApiError } from '../api/client.ts';
-import type { CreatedShowtime, ScreenDetail, ScreenSummary, TheaterOverview, TheaterSchedule } from '../api/types.ts';
+import type { CreatedShowtime, ScheduleEntry, ScreenDetail, ScreenSummary, TheaterOverview, TheaterSchedule } from '../api/types.ts';
 import { useAuth } from '../state/AuthContext.tsx';
 import { useAsync } from '../hooks/useAsync.ts';
 import {
@@ -230,6 +230,7 @@ function Dashboard() {
             setParams(next, { replace: true });
             theaters.reload();
           }}
+          onCancelled={schedule.reload}
           onAuthLost={requestLogin}
         />
       </div>
@@ -499,6 +500,7 @@ function ScheduleColumn({
   movies,
   languages,
   onCreated,
+  onCancelled,
   onAuthLost,
 }: {
   theater: TheaterOverview;
@@ -513,6 +515,7 @@ function ScheduleColumn({
   movies: Array<{ id: number; title: string }>;
   languages: Array<{ code: string; name: string }>;
   onCreated: (created: CreatedShowtime) => void;
+  onCancelled: () => void;
   onAuthLost: () => Promise<unknown>;
 }) {
   return (
@@ -571,49 +574,108 @@ function ScheduleColumn({
           </StateMessage>
         ) : (
           <ol className="grid gap-3">
-            {schedule?.showtimes.map((entry) => {
-              const open = entry.seatCount - entry.bookedSeats - entry.heldSeats;
-              return (
-                <li
-                  key={entry.showtimeId}
-                  data-testid="admin-showtime"
-                  data-showtime-id={entry.showtimeId}
-                  data-movie-id={entry.movieId}
-                  data-screen-id={entry.screenId}
-                  className={`surface p-4 sm:p-5 ${entry.status === 'CANCELLED' ? 'opacity-70' : ''}`}
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="eyebrow">{entry.screenName}</p>
-                      <h3 className="mt-1 font-display text-xl text-mist-50">{entry.movieTitle}</h3>
-                      <p className="mt-1 flex items-center gap-2 text-sm text-mist-300">
-                        <CalendarDays className="size-4 text-violet-300" aria-hidden />
-                        {localTime(entry.localStartTime)} – {localTime(entry.localEndTime)}
-                        <span className="text-mist-500">· {entry.languageCode.toUpperCase()}</span>
-                        {entry.status === 'CANCELLED' && <span className="text-danger-400">Cancelled</span>}
-                      </p>
-                    </div>
-                    <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:text-right">
-                      <div>
-                        <dt className="text-mist-500">Standard</dt>
-                        <dd className="text-mist-50">{entry.standardPrice == null ? '—' : price(entry.standardPrice)}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-mist-500">Premium</dt>
-                        <dd className="text-gold-300">{entry.premiumPrice == null ? '—' : price(entry.premiumPrice)}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                  <p className="mt-3 text-xs text-mist-500">
-                    {entry.bookedSeats} booked · {entry.heldSeats} held · {open} open · {entry.seatCount} seats
-                  </p>
-                </li>
-              );
-            })}
+            {schedule?.showtimes.map((entry) => (
+              <ShowtimeCard key={entry.showtimeId} entry={entry} onCancelled={onCancelled} onAuthLost={onAuthLost} />
+            ))}
           </ol>
         )}
       </div>
     </section>
+  );
+}
+
+function ShowtimeCard({
+  entry,
+  onCancelled,
+  onAuthLost,
+}: {
+  entry: ScheduleEntry;
+  onCancelled: () => void;
+  onAuthLost: () => Promise<unknown>;
+}) {
+  const { api } = useAuth();
+  const [cancelling, setCancelling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const open = entry.seatCount - entry.bookedSeats - entry.heldSeats;
+  const cancelled = entry.status === 'CANCELLED';
+
+  const cancel = async () => {
+    setError(null);
+    setCancelling(true);
+    try {
+      await api.cancelShowtime(entry.showtimeId);
+      onCancelled();
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 401) {
+        const user = await onAuthLost();
+        if (!user) return;
+        setError('Please try again now that you are signed in.');
+        return;
+      }
+      setError(describeAdminError(caught));
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  return (
+    <li
+      data-testid="admin-showtime"
+      data-showtime-id={entry.showtimeId}
+      data-movie-id={entry.movieId}
+      data-screen-id={entry.screenId}
+      data-status={entry.status}
+      className={`surface p-4 sm:p-5 ${cancelled ? 'opacity-70' : ''}`}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="eyebrow">{entry.screenName}</p>
+          <h3 className="mt-1 font-display text-xl text-mist-50">{entry.movieTitle}</h3>
+          <p className="mt-1 flex items-center gap-2 text-sm text-mist-300">
+            <CalendarDays className="size-4 text-violet-300" aria-hidden />
+            {localTime(entry.localStartTime)} – {localTime(entry.localEndTime)}
+            <span className="text-mist-500">· {entry.languageCode.toUpperCase()}</span>
+            {cancelled && (
+              <span className="text-danger-400" data-testid="admin-showtime-cancelled">
+                Cancelled
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:text-right">
+            <div>
+              <dt className="text-mist-500">Standard</dt>
+              <dd className="text-mist-50">{entry.standardPrice == null ? '—' : price(entry.standardPrice)}</dd>
+            </div>
+            <div>
+              <dt className="text-mist-500">Premium</dt>
+              <dd className="text-gold-300">{entry.premiumPrice == null ? '—' : price(entry.premiumPrice)}</dd>
+            </div>
+          </dl>
+          {!cancelled && (
+            <Button
+              size="sm"
+              variant="danger"
+              loading={cancelling}
+              onClick={() => void cancel()}
+              icon={<Ban className="size-4" aria-hidden />}
+              data-testid="admin-cancel-showtime"
+            >
+              Cancel showtime
+            </Button>
+          )}
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-mist-500">
+        {entry.bookedSeats} booked · {entry.heldSeats} held · {open} open · {entry.seatCount} seats
+      </p>
+      {error && (
+        <p role="alert" data-testid="admin-cancel-error" className="mt-3 rounded-xl bg-danger-400/10 px-3.5 py-2.5 text-sm text-danger-400">
+          {error}
+        </p>
+      )}
+    </li>
   );
 }
 

@@ -2,9 +2,10 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import type { BookingConfirmation, Hold, SeatMapEntry, ShowtimeDetail } from '../api/types.ts';
 
 /**
- * Everything the checkout page needs about a hold. The API has no "get hold" endpoint, so this is
- * captured when the hold is created and lives in memory only; after a reload the customer starts
- * again from the seat map (their credentials are gone at that point too).
+ * Everything the checkout page needs about a hold. Captured when the hold is created and kept in
+ * memory only. After a reload the password is gone too (credentials are never persisted), so the
+ * customer must sign in again; GET /api/holds/{id} then rebuilds this session without extending
+ * the hold.
  */
 export interface CheckoutSession {
   hold: Hold;

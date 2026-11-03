@@ -19,4 +19,14 @@ public interface PaymentAttemptRepository extends JpaRepository<PaymentAttempt, 
     /** Reads only the immutable hold id, without loading the entity into the persistence context. */
     @Query("SELECT a.holdId FROM PaymentAttempt a WHERE a.id = :id")
     Optional<UUID> findHoldIdById(@Param("id") UUID id);
+
+    /**
+     * In-flight attempts of holds for this showtime. Joins {@code seat_hold} only to filter by
+     * showtime; cancellation decides from this count and does not change payment rows.
+     */
+    @Query(value = """
+            SELECT count(*) FROM payment_attempt pa
+            JOIN seat_hold sh ON sh.id = pa.hold_id
+            WHERE sh.showtime_id = :showtimeId AND pa.status IN ('PENDING', 'UNKNOWN')""", nativeQuery = true)
+    long countInFlightForShowtime(@Param("showtimeId") long showtimeId);
 }

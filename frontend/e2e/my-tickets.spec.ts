@@ -15,7 +15,7 @@ test('a successful booking appears in My Tickets, opens its ticket, and the list
   await openShowtimeFromDiscovery(page, showtime);
   await selectSeats(page, seats);
   await page.getByTestId('continue-button').click();
-  await submitLogin(page, USERS.alice);
+  await submitLogin(page, USERS.e2eAlice);
   await expect(page.getByTestId('checkout-page')).toBeVisible();
   await chooseScenario(page, 'SUCCESS');
   await page.getByTestId('pay-button').click();
@@ -36,10 +36,10 @@ test('a successful booking appears in My Tickets, opens its ticket, and the list
   await expect(card.getByTestId('ticket-card-total')).toHaveText(usd(showtime.premiumPrice * 2));
   await expect(card.getByTestId('ticket-card-timing')).toHaveText('Upcoming');
 
-  // The cards are the server's own list, newest first. Other specs may book as Alice in parallel;
+  // The cards are the server's own list, newest first. Other specs may book as e2e.alice in parallel;
   // those bookings can only be newer, so the order of the shown cards must match the API's order.
   const shown = await page.getByTestId('ticket-card').evaluateAll((cards) => cards.map((c) => c.getAttribute('data-booking-id')));
-  const api = await request.get('/api/bookings?size=50', { headers: basicAuth(USERS.alice) });
+  const api = await request.get('/api/bookings?size=50', { headers: basicAuth(USERS.e2eAlice) });
   expect(api.status()).toBe(200);
   const apiIds = ((await api.json()) as { items: Array<{ bookingId: string }> }).items.map((item) => item.bookingId);
   expect(shown).toContain(bookingId);
@@ -60,9 +60,9 @@ test('a successful booking appears in My Tickets, opens its ticket, and the list
   await expect(page.getByTestId('tickets-signed-out')).toBeVisible();
   await expect(page.getByTestId('ticket-card')).toHaveCount(0);
 
-  // Bob signs in on the same page and never sees Alice's booking.
+  // e2e.bob signs in on the same page and never sees e2e.alice's booking.
   await page.getByTestId('tickets-sign-in').click();
-  await submitLogin(page, USERS.bob);
+  await submitLogin(page, USERS.e2eBob);
   await expect(page.getByTestId('ticket-list').or(page.getByTestId('tickets-empty'))).toBeVisible();
   await expect(card).toHaveCount(0);
   await expect(page.getByText(reference)).toHaveCount(0);

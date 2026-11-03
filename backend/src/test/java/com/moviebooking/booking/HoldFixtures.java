@@ -45,15 +45,32 @@ public final class HoldFixtures {
     }
 
     /** Scheduled showtimes in start order; all start after {@code TestClockConfiguration.START}. */
-    List<Long> showtimes(int count) {
+    public List<Long> showtimes(int count) {
         return jdbc.queryForList("SELECT id FROM showtime ORDER BY starts_at, id LIMIT ?", Long.class, count);
+    }
+
+    public long showtimeAt(String theaterName) {
+        return jdbc.queryForObject("""
+                SELECT st.id FROM showtime st
+                JOIN screen sc ON sc.id = st.screen_id
+                JOIN theater t ON t.id = sc.theater_id
+                WHERE t.name = ?
+                ORDER BY st.starts_at, st.id LIMIT 1""", Long.class, theaterName);
+    }
+
+    public String showtimeStatus(long showtimeId) {
+        return jdbc.queryForObject("SELECT status FROM showtime WHERE id = ?", String.class, showtimeId);
+    }
+
+    public long seatInventory(long showtimeId) {
+        return jdbc.queryForObject("SELECT count(*) FROM show_seat WHERE showtime_id = ?", Long.class, showtimeId);
     }
 
     Instant startsAt(long showtimeId) {
         return jdbc.queryForObject("SELECT starts_at FROM showtime WHERE id = ?", Instant.class, showtimeId);
     }
 
-    List<Long> seatIds(long showtimeId, int count) {
+    public List<Long> seatIds(long showtimeId, int count) {
         return jdbc.queryForList("SELECT seat_id FROM show_seat WHERE showtime_id = ? ORDER BY seat_id LIMIT ?",
                 Long.class, showtimeId, count);
     }
@@ -68,7 +85,7 @@ public final class HoldFixtures {
         return jdbc.queryForObject("SELECT id FROM app_user WHERE username = ?", Long.class, username);
     }
 
-    AuthenticatedUser principal(String username) {
+    public AuthenticatedUser principal(String username) {
         return customer(userId(username), username);
     }
 
@@ -90,7 +107,7 @@ public final class HoldFixtures {
         jdbc.update("UPDATE showtime SET status = 'CANCELLED' WHERE id = ?", showtimeId);
     }
 
-    String holdStatus(UUID holdId) {
+    public String holdStatus(UUID holdId) {
         return jdbc.queryForObject("SELECT status FROM seat_hold WHERE id = ?", String.class, holdId);
     }
 
@@ -98,7 +115,7 @@ public final class HoldFixtures {
         return jdbc.queryForObject("SELECT count(*) FROM seat_hold", Long.class);
     }
 
-    long activeHoldCount() {
+    public long activeHoldCount() {
         return jdbc.queryForObject("SELECT count(*) FROM seat_hold WHERE status = 'ACTIVE'", Long.class);
     }
 
@@ -107,7 +124,7 @@ public final class HoldFixtures {
     }
 
     /** Seat ids whose show_seat row is HELD by this hold. */
-    List<Long> seatsHeldBy(UUID holdId) {
+    public List<Long> seatsHeldBy(UUID holdId) {
         return jdbc.queryForList("SELECT seat_id FROM show_seat WHERE hold_id = ? AND status = 'HELD' ORDER BY seat_id",
                 Long.class, holdId);
     }
@@ -122,12 +139,12 @@ public final class HoldFixtures {
         return held;
     }
 
-    String seatStatus(long showtimeId, long seatId) {
+    public String seatStatus(long showtimeId, long seatId) {
         return jdbc.queryForObject("SELECT status FROM show_seat WHERE showtime_id = ? AND seat_id = ?",
                 String.class, showtimeId, seatId);
     }
 
-    long count(String table) {
+    public long count(String table) {
         return jdbc.queryForObject("SELECT count(*) FROM " + table, Long.class);
     }
 
