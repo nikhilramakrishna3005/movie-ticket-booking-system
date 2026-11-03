@@ -3,7 +3,7 @@ import { Languages, Search, Sparkles, Tags, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../state/AuthContext.tsx';
 import { useAsync } from '../hooks/useAsync.ts';
-import { fetchShowtimes, groupByMovie, uniqueGenres, uniqueLanguages } from '../features/discovery/showtimes.ts';
+import { fetchShowtimes, groupByMovie, resultSummary, uniqueGenres, uniqueLanguages } from '../features/discovery/showtimes.ts';
 import { useCityAndDate } from '../features/discovery/useCityAndDate.ts';
 import { addDays, longDate } from '../lib/dates.ts';
 import { describeError } from '../lib/errors.ts';
@@ -144,7 +144,7 @@ export function DiscoverPage() {
           <h2 className="font-display text-2xl font-semibold text-mist-50">{longDate(date)}</h2>
           {showtimes.status === 'success' && (
             <p className="hidden text-sm text-mist-500 sm:block">
-              {groups.length} {groups.length === 1 ? 'movie' : 'movies'} · {showtimes.data.length} showtimes
+              {resultSummary(groups.length, showtimes.data.length)}
             </p>
           )}
         </div>
