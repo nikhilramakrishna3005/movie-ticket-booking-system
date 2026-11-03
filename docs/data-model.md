@@ -47,6 +47,7 @@ erDiagram
     BOOKING ||--o{ SHOW_SEAT : "owns (when BOOKED)"
     BOOKING ||--|{ BOOKING_SEAT : contains
     SHOW_SEAT ||--o| BOOKING_SEAT : "sold once"
+    APP_USER ||--o{ NOTIFICATION_INBOX : receives
 
     LANGUAGE {
         text code PK "two lower-case letters"
@@ -234,10 +235,11 @@ No Flyway migration was added.
 `created_at DESC, id DESC`, so ties are broken the same way on every request. The seats, the
 showtime, theater, city and time zone, and the movie title are then read from their own
 tables in batches, one query each per page. `DatabaseSchemaIT.bookingHistoryIsIndexedByCustomerNewestFirst`
-checks the index definition and that the old index is gone. The query plan has not been
-measured at scale.
+checks the index definition and that the old index is gone. In the Task 14 audit, `EXPLAIN`
+on the sample-sized local database showed this read using `booking_customer_history_idx`; the
+plan has not been measured at scale.
 
-## Tables that exist but are not fully used
+## Outbox delivery and cancelled showtimes
 
 - `outbox_event`: a `BookingConfirmed` row is written in the booking transaction. The in-process
   dispatcher claims unpublished due rows (`FOR UPDATE SKIP LOCKED` plus a per-claim `claim_token`),

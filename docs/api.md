@@ -47,7 +47,7 @@ Rules for every protected endpoint:
   creating a hold.
 - Another customer's hold, payment or booking: 404 `NOT_FOUND`, so their IDs are not revealed.
 
-**Designed but not implemented:**
+**Designed but not implemented** (full list in [`docs/deferred-scope.md`](deferred-scope.md)):
 - Hold sweeper and scheduled payment reconciliation
 - Customer booking cancellation / refunds
 - Kafka (the local outbox poller is not a broker; ADR 0002)

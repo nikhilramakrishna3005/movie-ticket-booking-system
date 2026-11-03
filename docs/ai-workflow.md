@@ -44,6 +44,14 @@
 | Explaining unfamiliar APIs | Merging, approving, or pushing to `main` |
 | Suggesting edge cases and failure modes | Inventing results, benchmarks, or reviews |
 
+**In practice (summary of §4–§7).** The project is human-directed and AI-assisted. The owner
+wrote every task prompt and its constraints, made the design decisions recorded in §4.1,
+reviewed the pull requests, found defects in review (§4.2, §4.3), used the running app by hand,
+and merged all 12 PRs through GitHub. AI coding agents in Cursor wrote most of the code,
+migrations, tests and documentation from those prompts, ran the test suites, and recorded the
+commands and results (§7) and their own mistakes (§5). The Git history reflects this: commits
+are authored by the owner or by the Cursor agent, many with a co-author trailer for the other.
+
 ## 4. Review findings
 
 Record only findings from human reviews that actually took place. Do not pre-populate.
@@ -74,7 +82,7 @@ Record only findings from human reviews that actually took place. Do not pre-pop
 |---|---|---|---|
 | 2026-11-02 | Phase 3 / PR #4 | Reconciliation race: `CheckoutService.resolveIfDue()` treated provider `NOT_FOUND` as a definitive decline once a `PENDING` attempt was older than 5 s, although the original charge could still be executing. A late capture could then leave the attempt `DECLINED` while the ledger said `CAPTURED`. It was only voided if the request thread survived and the void succeeded. | Resolution now fences an unknown key in the provider ledger (`statusOrFence`), so `NOT_FOUND` means "never charged and never will be". Added a latch-ordered API test and provider-level tests that order the charge and the fence on the ledger key. Verified on local PostgreSQL 16 only; Testcontainers not run. Remaining limitation: architecture §6.7. |
 
-### 4.3 Tasks 06–09: discovery APIs, React app, Playwright, final audit
+### 4.3 Tasks 06–14: discovery APIs, React app, Playwright, audits and later features
 
 | Date | Task / PR | Human decision or review finding | Action taken |
 |---|---|---|---|
@@ -86,6 +94,10 @@ Record only findings from human reviews that actually took place. Do not pre-pop
 | 2026-11-03 | Task 10 (prompt) | The owner asked for the search debounce race to be fixed at its cause, with a deterministic Playwright regression that fails first, and for a customer booking history (`GET /api/bookings` plus a My Tickets screen) with the customer taken only from the principal. On the owner's Mac, the existing Compose stack and its database, which held a booking made by hand, had to be kept: "Do not run docker compose down -v or delete any database volume without explicit permission." | Implemented on `feature/task-10-search-race-and-my-bookings`. The stack was only rebuilt in place, and the hand-made booking was checked before and after V10 was applied. |
 | 2026-11-03 | Task 11 (prompt) | Complete theater administration with real APIs: assigned theaters only, screens and seating plans, showtime creation, service-layer authorization, and a Cinéva admin dashboard. Screen layouts must not change seats that existing showtimes already reference. Preserve the running Compose database. | Implemented on `feature/task-11-theater-admin`. No new migration: a layout can be replaced only before the first showtime, under the same `screen` lock as scheduling. |
 | 2026-11-03 | Task 12 (prompt) | Authorized showtime cancellation that never deletes bookings or silently refunds; `GET /holds/{id}` ownership-scoped; Playwright isolation from Alice and Bob; preserve the running Compose database. | Implemented on `feature/task-12-cancel-and-hold-lookup`. Policy: 409 if bookings, in-flight payments or live holds exist; expired holds are swept in the cancel transaction. Flyway V11 seeds `e2e.alice` / `e2e.bob`. |
+| 2026-11-03 | Task 13 (prompt) | A real local consumer for the outbox: at-least-once delivery with `FOR UPDATE SKIP LOCKED`, bounded batches and backoff, an idempotent inbox keyed by event id, crash recovery, and no Kafka, Redis or external services. No exactly-once claims; forward-only migrations. | Implemented on `feature/task-13-outbox-delivery` (V12, `OutboxDispatcher`, `notification_inbox`, `/notifications`). |
+| 2026-11-03 | Task 13 / PR #13 (review) | **Human review of the GitHub diff found two reliability defects** that every automated run had passed: (1) `NotificationInboxWriter.record()` caught a unique-constraint `DataIntegrityViolationException` inside an active transaction and continued, after an exists-then-insert check; (2) `markPublished` and `recordFailure` had no fencing, so a worker whose claim lease had expired could acknowledge or fail an event another worker had reclaimed. | Fixed in `f625ca7`: an atomic `INSERT … ON CONFLICT (event_id) DO NOTHING`, and a `claim_token` UUID generated on every claim (V13) that ack and failure must match. New Testcontainers tests: concurrent duplicate inbox inserts commit one row; worker A's late ack and failure after worker B reclaims leave B authoritative; a crash after the inbox commit replays without a duplicate. 186/186 integration tests. |
+| 2026-11-03 | Task 14 (final audit, prompt) | The owner asked for a requirements traceability audit, full regression, live smoke tests with the E2E identities, an edge-case and index review, and doc corrections, fixing only confirmed high-severity bugs and broken steps, each code fix with a regression test. Keep booking `9956RB4M`, never reset the database, do not merge or send email. | Done on `feature/task-14-final-audit`: two fixes (admin schedule refresh, `run-tests.sh` skip guard), doc corrections, and the audit record in `docs/test-strategy.md` and `docs/requirements-checklist.md`. Other defects were recorded, not fixed. |
+| 2026-11-03 | Task 14 (documentation and presentation audit, prompt) | On the same branch: make the README professional and current, add `docs/deferred-scope.md` (every significant omitted feature, why, and what was built instead), check every document, link, technical claim and test count, and describe the project truthfully as human-directed and AI-assisted, without claiming that either the AI or the owner did everything. Preserve code, tests, history, Docker data and booking `9956RB4M`; do not merge. | README rewritten, `docs/deferred-scope.md` added, stale statements corrected (this section, §6, architecture §11 and §13). Documentation only; no application code or test changed. |
 
 ## 5. AI mistakes observed
 
@@ -115,13 +127,18 @@ the human owner to classify; none of those are entered here.
 | 2026-11-03 | Task 11 (admin date) | The dashboard used `schedule.data?.date ?? date ?? today` with `date = ''` when the URL had no date. `??` does not skip `''`, so `longDate('')` threw `RangeError: Invalid time value` and unmounted the app after admin login. | Playwright `admin.spec.ts` against the Compose stack; a debug run captured the pageerror. | Treat a missing date as `undefined` so today is used until the schedule arrives. |
 | 2026-11-03 | Task 12 (cancel IT compile) | `ShowtimeCancellationIT` called HoldFixtures helpers that were package-private. | First `./mvnw -B verify` compile of the new IT. | Those helpers were made `public`. |
 | 2026-11-03 | Task 13 (test YAML) | A test `application.yml` replaced the main YAML document and dropped `booking.lock-timeout`. | `ApplicationContextWithoutDatabaseTest` failed 28/28 to load the context. | Overlay `booking.outbox.enabled=false` with `src/test/resources/application.properties` instead. |
+| 2026-11-03 | Task 11 (admin dashboard), found in Task 14 | After a successful create, the dashboard only rewrote the theater/date URL parameters. When the showtime was on the date being viewed (the form's default), nothing changed, so the schedule was not refetched and the new showtime stayed invisible. The Task 11 E2E test always created on a different date than the one displayed, so it passed. | Task 14 live smoke test in the browser (showtime 1294). | `AdminPage` reloads the schedule in that case; a Playwright regression creates on the viewed date and failed before the fix. |
+| 2026-11-03 | Task 09 (`run-tests.sh`), found in Task 14 | The skipped-test guard for frontend tests matched only the TAP line `# skipped N`. Node 23 and later print `ℹ skipped N` (the `spec` reporter) even when piped, so a skipped frontend test passed the guard. | Task 14 audit, reading the log of a passing run on Node 25.9, then a temporary skipped and todo test. | The guard matches both forms. |
+| 2026-11-03 | Task 14 (manual probes) | Several hand-written probes used a wrong path (`/payments` instead of `/payment`), wrong column names, or a booking reference where the API takes the booking id. | They returned 404, 400 or a SQL error; nothing was charged or written. | Corrected and re-run. No product change. |
 
-## 6. Task prompts and context (Tasks 06–13)
+## 6. Task prompts and context (Tasks 06–14)
 
-The prompts below were given by the human owner to one Cursor cloud agent (Claude) working in a
-VM with a clone of this repository. Earlier phases (PRs #1–#4) were done by a different agent
-session whose prompts are not available here; their findings are recorded in §4.1, §4.2 and §5.
-The prompts are summarized, and constraints are quoted where they shaped the result.
+The prompts below were given by the human owner to Cursor AI agents. Tasks 06–09 were done by a
+Cursor cloud agent (Claude) working in a VM with a clone of this repository; Tasks 10–14 were
+done by local Cursor agents on the owner's Mac, against the owner's running Compose stack.
+Earlier phases (PRs #1–#4) were done by a different agent session whose prompts are not
+available here; their findings are recorded in §4.1, §4.2 and §5. The prompts are summarized,
+and constraints are quoted where they shaped the result.
 
 | Task | Prompt summary | Key constraints given |
 |---|---|---|
@@ -134,6 +151,8 @@ The prompts are summarized, and constraints are quoted where they shaped the res
 | 11: theater administration | Complete theater admin: assigned theaters only, screens and seating plans, creating a showtime, service-layer authorization, a Cinéva admin dashboard, Testcontainers coverage including cross-theater 403 and a showtime-creation race, frontend form unit tests, and a Playwright path from admin login through public discovery. | "Never modify or delete seats belonging to existing showtimes." "Never run docker compose down -v or delete volumes." "Do not reset or alter existing booked seats." "Do not implement cancellation or outbox processing." "STOP after Task 11." |
 | 12: showtime cancellation and hold lookup | Authorized cancel with lock-order-safe refusal of bookings, in-flight payments and live holds; `GET /holds/{id}`; Playwright customers `e2e.alice` / `e2e.bob`; dashboard Cancel control. | "Never run docker compose down -v." "Never modify previously committed Flyway migrations." "Do not persist passwords." "STOP after Task 12." |
 | 13: transactional outbox delivery | In-process dispatcher with SKIP LOCKED, idempotent inbox, retry/backoff, crash recovery tests; no Kafka. | "Never run docker compose down -v." "Never modify previously committed Flyway migrations." "STOP after Task 13." |
+| 14: final quality audit | Requirements traceability, full regression, live smoke tests, SDET edge-case audit, indexes and `EXPLAIN`, docs, security and demo readiness; fix only confirmed high-severity bugs, broken steps and doc inaccuracies. | "NEVER use docker compose down -v." "Do not delete or modify booking 9956RB4M." "Use dedicated E2E customer identities." "No fake screenshots or fabricated success reports." "Do NOT merge automatically." |
+| 14 follow-up: documentation and presentation audit | Professional, current README; `docs/deferred-scope.md`; check every document, link, claim and test count; describe the human and AI roles truthfully. | "Continue working on that SAME branch." "Be truthful; do not claim AI did everything or that I manually wrote everything." "Preserve all existing application code, tests, Git history, Docker data and booking 9956RB4M." "Do NOT merge." |
 
 Task 12 was done by a local Cursor agent on the owner's Mac against the owner's running
 Compose stack, after PR #11 had been merged to `main`.
@@ -148,7 +167,7 @@ For Tasks 06–09, its environment needed two VM-only fixes, neither of them com
 - `sudo iptables-legacy -P FORWARD ACCEPT`, because a stale legacy `FORWARD DROP` policy blocked
   container-to-container traffic. Re-confirmed in the audit.
 
-## 7. Verification performed (Tasks 06–13)
+## 7. Verification performed (Tasks 06–14)
 
 | Task | Commands run by the AI agent | Result |
 |---|---|---|
@@ -161,17 +180,21 @@ For Tasks 06–09, its environment needed two VM-only fixes, neither of them com
 | 11 | `./mvnw -B verify -Dit.test=AdminTheaterApiIT`; mutation of `replaceLayout` without the screen lock (3 runs); `./mvnw -B clean verify`; `npm test`; `npm run typecheck`; `docker compose up -d --build` (no `down -v`); `npx playwright test`, then `--repeat-each=3`; `./run-tests.sh` | 16/16; failed 3/3 without the lock; 64/64 + 158/158; 50/50; typecheck OK; healthy, booking `9956RB4M` kept; 8/8, then 24/24; exit 0 |
 | 12 | `./mvnw -B clean verify`; `npm test`; `npm run build`; `docker compose up -d --build --wait` (no `down -v`); `npx playwright test`, then `--repeat-each=3`; `./run-tests.sh` | 64/64 + 174/174; 52/52; build OK; healthy, V11 applied, booking `9956RB4M` kept; 9/9, then 27/27; exit 0 |
 | 13 | `./mvnw -B clean verify`; `npm test`; `npm run build`; `docker compose up -d --build --wait` (no `down -v`); `npx playwright test`; `./run-tests.sh` | 66/66 + 184/184 then 186/186 after claim-token/ON CONFLICT review; 53/53; build OK; booking `9956RB4M` kept |
+| 14 | `./mvnw -B clean verify`; `npm test`; `npm run build`; `docker compose up -d --build --wait` (no `down -v`); Flyway on a disposable PostgreSQL; `npx playwright test`; the admin regression before and after the fix (`--repeat-each=3`); `EXPLAIN`; `ab -n 500 -c 10`; `./run-tests.sh` after the fixes | 66/66 + 186/186; 53/53; build OK; healthy, booking `9956RB4M` kept; V1–V13 applied; 9/9 before the new test; failed, then 3/3; index-backed; 0 failed requests; exit 0 with Playwright 10/10 |
+| 14 documentation audit | `./run-tests.sh`; `npm run build`; a script resolving every relative link, anchor and cited path in the docs; booking and Flyway check | Exit 0 with 66/66 + 186/186, 53/53 and Playwright 10/10; build OK; 0 broken links; booking `9956RB4M` `CONFIRMED`, Flyway V13 |
 
 A human re-run of these commands is not recorded in this document.
 
-## 8. Reflections
+## 8. Observations
 
-_Placeholder for the human owner's own reflections._ Factual observations from the entries above:
+Drawn from the entries above by the AI agent; these are not the owner's personal reflections.
 
 - Several real defects were caught only by **running** things rather than by reading code: the
   GiST deadlock, the Hibernate lock clause, the Maven checksum failure, the route-change crash and
   the README example.
 - **Mutation checks** (deliberately breaking the code to see if a test fails) exposed two tests
   that passed for the wrong reason (§5).
-- **Human review** caught a defect that every automated run missed: the ignored `city` parameter
-  passed because the screen name happened to be unique.
+- **Human review** caught defects that every automated run missed: the ignored `city` parameter
+  passed because the screen name happened to be unique, and the two Task 13 outbox defects
+  (an exception swallowed inside a transaction, and unfenced acknowledgements) passed because no
+  test exercised a stale worker or a concurrent duplicate insert.

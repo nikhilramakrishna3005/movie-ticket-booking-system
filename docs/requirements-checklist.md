@@ -1,14 +1,14 @@
 # Requirements Checklist
 
-> **Status: FINAL AUDIT, 2026-11-02; updated for Tasks 10–12 on 2026-11-03.** This maps every requirement in `AGENTS.md` (the assignment
+> **Status: FINAL AUDIT, 2026-11-02; updated for Tasks 10–13 and the Task 14 final audit on 2026-11-03.** This maps every requirement in `AGENTS.md` (the assignment
 > constraints) and every acceptance criterion in `docs/product-scope.md` to the code, tests and
 > documentation that address it. Status values:
 > - **Complete:** implemented and covered by a passing automated test, or verifiable in the code.
 > - **Partial:** some of it is implemented; the gap is stated.
 > - **Not implemented:** not built, and stated as such.
 >
-> The test results referred to are from the Task 12 run in `docs/test-strategy.md`; §10 also
-> keeps the Task 11, Task 10 and final-audit results.
+> The test results referred to are from the Task 14 final-audit run in §10, which also keeps the
+> earlier task results.
 
 ## 1. Project goals (`AGENTS.md` §1)
 
@@ -16,7 +16,7 @@
 |---|---|---|---|
 | No seat is ever sold twice | Complete | Ordered `FOR UPDATE` locks in `HoldService` and `CheckoutTransactions`; `booking_seat UNIQUE (showtime_id, seat_id)` | `HoldConcurrencyIT`, `PaymentConcurrencyIT`, `DatabaseSchemaIT.aSeatCannotBeBookedTwiceForTheSameShowtime`, E2E decline-retry test |
 | An expired hold is never converted into a booking | Complete | TX3 validity check under lock with `clock.instant()`; void path in `CheckoutService` | `PaymentApiIT.captureArrivingAfterHoldExpiryIsVoidedEvenThoughTheSeatsAreFree`, `…unknownPaymentResolvedAfterHoldExpiryIsVoidedAndBooksNothing` |
-| Behavior proven by automated tests, especially concurrency | Complete | 66 + 186 backend, 53 frontend unit and 9 E2E tests, all passing | `docs/test-strategy.md` |
+| Behavior proven by automated tests, especially concurrency | Complete | 66 + 186 backend, 53 frontend unit and 10 E2E tests, all passing | `docs/test-strategy.md` |
 | Explicit tradeoffs | Complete | ADRs 0001–0003; architecture §6.7 (provider limits), §7 (multi-instance clock), §12 (scale); README known limitations | — |
 | Clear module ownership | Complete (by convention) | Packages `catalog`, `theater`, `booking`, `payment`, `admin`, `security` (plus `config`) | Enforced by review only; no ArchUnit test (as `AGENTS.md` §3 allows) |
 | 10-hour budget | Not tracked | — | Time was not tracked precisely, so no actual hours are claimed (`docs/implementation-plan.md` §6) |
@@ -31,7 +31,7 @@
 | React frontend | Complete | React 19 + TypeScript + Vite (`frontend/`) |
 | Docker Compose, whole system local, no cloud dependencies | Complete | `docker-compose.yml` (postgres, backend, frontend). After the images are built, no hosted service is used. Building downloads base images and Maven and npm packages once. |
 | JUnit 5, Spring Boot integration tests, Testcontainers PostgreSQL | Complete | 186 `*IT` tests on `postgres:16-alpine` |
-| Playwright, at least 2 tests | Complete | 9 tests in `frontend/e2e/` |
+| Playwright, at least 2 tests | Complete | 10 tests in `frontend/e2e/` |
 | Simulated in-process payment (success, failure, timeout) | Complete | `SimulatedPaymentProvider` with its own ledger table; scenarios `SUCCESS` / `DECLINE` / `TIMEOUT` |
 | Spring Security, HTTP Basic, seeded demo users | Complete | `SecurityConfig`; V8 demo users and V11 Playwright customers (BCrypt hashes) |
 | Injectable UTC `Clock` for all expiry logic | Complete | `ClockConfig`. No `Instant.now()`, `LocalDateTime.now()` or SQL `NOW()` in `backend/src/main` (checked with `rg`). Tests use `MutableClock`. |
@@ -51,8 +51,8 @@
 | Requirement | Status | Evidence |
 |---|---|---|
 | Short service-layer transactions; no network, sleep or payment calls inside them | Complete | Provider guard and the tests above |
-| Every schema change is a new migration; committed migrations are unchanged | Complete | V1–V10. Task 10 added V10 and modified no committed migration. |
-| Database constraints as backstops | Complete | `docs/data-model.md` constraint table; 33 `DatabaseSchemaIT` tests |
+| Every schema change is a new migration; committed migrations are unchanged | Complete | V1–V13. Tasks 10–13 added V10–V13 and modified no committed migration. |
+| Database constraints as backstops | Complete | `docs/data-model.md` constraint table; 35 `DatabaseSchemaIT` tests |
 | Global lock order and bounded `lock_timeout` | Complete | `set_config('lock_timeout', …)` in `ShowSeatRepository` and `ScreenRepository`; `HoldConcurrencyIT.lockWaitIsBoundedAndReportedAsSeatsBusyWithNothingHeld`, `…overlappingMultiSeatRequestsNeverDeadlockOrPartiallySucceed` |
 | Frontend: functional components, one API client module, stable `data-testid` | Complete | `frontend/src/api/client.ts`; `data-testid` used by all E2E selectors |
 
@@ -61,7 +61,7 @@
 | Requirement | Status | Tests |
 |---|---|---|
 | Unit tests for pure business rules | Complete | `HoldRulesTest`, `PaymentAttemptRulesTest`, `ShowtimeSchedulingRulesTest`, `ShowtimeSearchTest`, `AccessPolicyTest`, `BookingPageRequestTest`; frontend `paymentFlow.test.ts`, `selection.test.ts`, `history.test.ts` |
-| Testcontainers integration tests for DB, transactions and locking (no H2) | Complete | All 142 `*IT` tests |
+| Testcontainers integration tests for DB, transactions and locking (no H2) | Complete | All 186 `*IT` tests |
 | Concurrency: many threads, exactly one winner per seat | Complete | `HoldConcurrencyIT` (5), `PaymentConcurrencyIT` (4), `AdminShowtimeApiIT.concurrentOverlappingCreatesProduceExactlyOneShowtime` |
 | Payment success, decline and timeout each tested | Complete | `PaymentApiIT.successfulPaymentConfirmsOneBookingAndBooksTheSeats`, `…declineCreatesNoBookingAndARetryNeedsANewKey`, `…timeoutIsUnknownUntilAPollFindsTheCaptureAndConfirms` |
 | Idempotent replay: charge count stays 1 | Complete | `PaymentApiIT.replayingAKeyReturnsTheSameBookingWithoutChargingAgain`, `PaymentConcurrencyIT.concurrentRequestsWithTheSameKeyChargeOnceAndBookOnce` (assert `simulated_provider_charge` count is one) |
@@ -74,15 +74,15 @@
 
 ## 6. Working rules, Git and secrets (`AGENTS.md` §6)
 
-| Requirement | Status | Evidence (audit 2026-11-02) |
+| Requirement | Status | Evidence (re-checked 2026-11-03, Task 14) |
 |---|---|---|
-| Never push or merge to `main` (humans merge) | Complete | All 7 changes reached `main` as merge commits of reviewed PRs #1–#4 and #6–#8 |
-| No squash, rebase, amend or force-push; history preserved | Complete as far as the local history can show | `origin/main` has 35 commits. Every PR's individual commits are reachable as the second parent of its merge commit. |
+| Never push or merge to `main` (humans merge) | Complete | All 12 changes reached `main` as merge commits of reviewed PRs #1–#4 and #6–#13 |
+| No squash, rebase, amend or force-push; history preserved | Complete as far as the local history can show | `origin/main` has 61 commits. Every PR's individual commits are reachable as the second parent of its merge commit. |
 | No secrets in the repository | Complete | A history-wide scan for private keys, cloud and GitHub tokens, and API-key patterns found none. Only `.env.example` (placeholders) is tracked; `.env` is git-ignored and was never committed. |
 | Local credentials via environment variables, with `.env.example` placeholders | Complete | `docker-compose.yml` requires `POSTGRES_*` from `.env`; `application.yml` reads `DB_*` with no defaults |
 | Demo users public, local-only and labeled | Complete | README "Demo accounts (fictional, local only)"; V8 comments. The passwords appear only in the README, V8 comments, backend tests and E2E fixtures. |
 | React holds no credentials and stores none | Complete | No `localStorage`, `sessionStorage`, `indexedDB` or `document.cookie` in `frontend/src`; no demo password in `frontend/src` or the built bundle; `client.test.ts` covers in-memory credentials; `my-tickets.spec.ts` asserts local and session storage and cookies are empty after viewing tickets |
-| Source, migrations, frontend and tests tracked | Complete | `git ls-files`: `backend/src/main` (Java and V1–V10), `backend/src/test`, `frontend/src`, `frontend/e2e`, Dockerfiles, Compose, docs. Build outputs and reports are ignored. |
+| Source, migrations, frontend and tests tracked | Complete | `git ls-files`: `backend/src/main` (Java and V1–V13), `backend/src/test`, `frontend/src`, `frontend/e2e`, Dockerfiles, Compose, docs. Build outputs and reports are ignored. |
 
 ## 7. Acceptance criteria (`docs/product-scope.md` §5)
 
@@ -136,7 +136,7 @@
 | Document | Status | Location |
 |---|---|---|
 | README: overview, prerequisites, one-command start, demo accounts, screenshots, tests, structure, limitations | Complete | `README.md` |
-| Product scope and deferred features | Complete | `docs/product-scope.md` (§4 non-goals, §8 delivery status) |
+| Product scope and deferred features | Complete | `docs/product-scope.md` (§4 non-goals, §8 delivery status); `docs/deferred-scope.md` (every omitted feature, the reason, and what was built instead) |
 | Roles and permissions matrix | Complete | `docs/architecture.md` §8.1 (marked as implemented or not) |
 | Architecture diagram and booking/payment flow | Complete | `docs/architecture.md` §2, §6.3, §6.4 |
 | ERD matching V1–V13 | Complete | `docs/data-model.md` |
@@ -219,7 +219,24 @@ A clean `docker compose down -v` start was not run for Task 13, to keep the loca
 | Playwright against the running stack | 9/9 |
 | Single runner: `./run-tests.sh` against the running stack | Exit 0: backend 66/66 unit and 186/186 integration, frontend 53/53, Playwright 9/9, no skipped tests |
 
+**Task 14 final audit (2026-11-03, same Mac, existing Compose stack and database kept):**
+
+| Check | Result |
+|---|---|
+| Single runner: `./run-tests.sh` against the running stack, after the fixes | Exit 0 in 85 s: backend 66/66 unit and 186/186 integration, frontend 53/53, Playwright 10/10, no skipped tests |
+| Frontend: `npm run typecheck`; `npm test`; `npm run build` | Exit 0; 53/53; build succeeds with Vite's over-500 kB chunk warning |
+| Stack rebuilt in place: `docker compose up -d --build --wait` (no `down -v`) | All three services healthy; Flyway at V13; booking `9956RB4M` still `CONFIRMED` |
+| Fresh database | Flyway applied V1–V13 to an empty, disposable PostgreSQL 16 container |
+| Admin schedule regression | New Playwright test failed before the fix and passed 3/3 after it |
+| Manual smoke as `e2e.alice`, `e2e.bob` and both admins | Booking, decline and retry, real 8-minute hold expiry, notification inbox, cross-customer and cross-theater refusal, admin scheduling and cancellation |
+| `EXPLAIN` and bounded read probe | Hot reads are index-backed; `ab -n 500 -c 10` on search, typo search and seat map had 0 failures (`docs/test-strategy.md`) |
+
+A clean `docker compose down -v` start was not run for Task 14, to keep the local database.
+
 ## 11. Remaining gaps (honest summary)
+
+Deliberately omitted features are listed, with reasons and what was built instead, in
+`docs/deferred-scope.md`. The gaps in what was built are:
 
 - Not implemented: hold-cleanup sweeper, scheduled payment reconciliation;
   customer booking cancellation / refunds. Kafka remains deferred (ADR 0002).
@@ -230,8 +247,16 @@ A clean `docker compose down -v` start was not run for Task 13, to keep the loca
 - Showtime cancellation refuses while a simulated payment is `PENDING` or `UNKNOWN`. If that
   attempt then captures, the show has bookings and cannot be cancelled; Cinéva does not void
   or refund it. Live holds are also refused rather than force-invalidated.
-- E2E tests do not cover timeout/`UNKNOWN` polling, hold expiry, keyboard-only use or mobile
-  viewports; these are covered at the API or unit level, or not at all (`docs/test-strategy.md`).
-- No load testing, so no scalability claim.
+- E2E tests do not cover timeout/`UNKNOWN` polling, hold expiry, the notification inbox,
+  keyboard-only use or mobile viewports; these are covered at the API or unit level, or not at
+  all (`docs/test-strategy.md`). Task 14 exercised hold expiry (real 8-minute TTL) and the inbox
+  manually against the running stack.
+- Known UI defects found in Task 14 and not fixed (no data impact): on the admin page, when the
+  14-day date strip is shown, the two-column grid squeezes the Screens column to 0 px at a
+  1024 px viewport (and below its 22rem width up to about 1424 px), so the screen cards overlap
+  the schedule. "Cancel showtime" acts on one click, without a confirmation step. The Discover
+  summary reads "1 showtimes" for a single result.
+- No load testing, so no scalability claim. Task 14 ran only a bounded local read probe
+  (`docs/test-strategy.md`).
 - The sample data, and the E2E screen lookup, stop working after 2027-01-31.
 - Engineering time was not tracked precisely.
