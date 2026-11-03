@@ -63,6 +63,12 @@ function compareShowtimes(a: ShowtimeSearchResult, b: ShowtimeSearchResult): num
   return a.startsAt.localeCompare(b.startsAt) || a.movieTitle.localeCompare(b.movieTitle) || a.showtimeId - b.showtimeId;
 }
 
+/** 1, 1 → "1 movie · 1 showtime"; 2, 5 → "2 movies · 5 showtimes" */
+export function resultSummary(movieCount: number, showtimeCount: number): string {
+  const count = (n: number, noun: string) => `${n} ${n === 1 ? noun : `${noun}s`}`;
+  return `${count(movieCount, 'movie')} · ${count(showtimeCount, 'showtime')}`;
+}
+
 export function uniqueGenres(movies: Movie[]): string[] {
   return [...new Set(movies.flatMap((movie) => movie.genres))].sort();
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Ban, CalendarDays, Clapperboard, Lock, LogIn, Plus, Sparkles } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { ApiError } from '../api/client.ts';
@@ -196,7 +196,8 @@ function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
+      {/* Zero-minimum tracks make the 14-day date strip scroll instead of widening the grid over the screens column. */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]">
         <ScreensColumn
           theater={theater}
           details={details.data ?? []}
@@ -579,7 +580,13 @@ function ScheduleColumn({
         ) : (
           <ol className="grid gap-3">
             {schedule?.showtimes.map((entry) => (
-              <ShowtimeCard key={entry.showtimeId} entry={entry} onCancelled={onCancelled} onAuthLost={onAuthLost} />
+              <ShowtimeCard
+                key={entry.showtimeId}
+                entry={entry}
+                date={selectedDate}
+                onCancelled={onCancelled}
+                onAuthLost={onAuthLost}
+              />
             ))}
           </ol>
         )}
@@ -590,26 +597,35 @@ function ScheduleColumn({
 
 function ShowtimeCard({
   entry,
+  date,
   onCancelled,
   onAuthLost,
 }: {
   entry: ScheduleEntry;
+  date: string;
   onCancelled: () => void;
   onAuthLost: () => Promise<unknown>;
 }) {
   const { api } = useAuth();
+  const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // State alone can let a fast double click through before the button re-renders as disabled.
+  const submitted = useRef(false);
   const open = entry.seatCount - entry.bookedSeats - entry.heldSeats;
   const cancelled = entry.status === 'CANCELLED';
 
   const cancel = async () => {
+    if (submitted.current) return;
+    submitted.current = true;
     setError(null);
     setCancelling(true);
     try {
       await api.cancelShowtime(entry.showtimeId);
+      setConfirming(false);
       onCancelled();
     } catch (caught) {
+      setConfirming(false);
       if (caught instanceof ApiError && caught.status === 401) {
         const user = await onAuthLost();
         if (!user) return;
@@ -618,6 +634,7 @@ function ShowtimeCard({
       }
       setError(describeAdminError(caught));
     } finally {
+      submitted.current = false;
       setCancelling(false);
     }
   };
@@ -662,8 +679,12 @@ function ShowtimeCard({
               size="sm"
               variant="danger"
               loading={cancelling}
-              onClick={() => void cancel()}
+              onClick={() => {
+                setError(null);
+                setConfirming(true);
+              }}
               icon={<Ban className="size-4" aria-hidden />}
+              aria-haspopup="dialog"
               data-testid="admin-cancel-showtime"
             >
               Cancel showtime
@@ -679,7 +700,102 @@ function ShowtimeCard({
           {error}
         </p>
       )}
+      {!cancelled && (
+        <CancelShowtimeDialog
+          open={confirming}
+          entry={entry}
+          date={date}
+          busy={cancelling}
+          onKeep={() => setConfirming(false)}
+          onConfirm={() => void cancel()}
+        />
+      )}
     </li>
+  );
+}
+
+/**
+ * Native modal <dialog>, like the sign-in dialog: focus stays inside, Escape and a backdrop click
+ * keep the showtime, and focus starts on the non-destructive choice.
+ */
+function CancelShowtimeDialog({
+  open,
+  entry,
+  date,
+  busy,
+  onKeep,
+  onConfirm,
+}: {
+  open: boolean;
+  entry: ScheduleEntry;
+  date: string;
+  busy: boolean;
+  onKeep: () => void;
+  onConfirm: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const keep = useRef<HTMLButtonElement>(null);
+  const id = useId();
+
+  useEffect(() => {
+    const element = dialog.current;
+    if (!element) return;
+    if (open && !element.open) {
+      element.showModal();
+      keep.current?.focus();
+    } else if (!open && element.open) {
+      element.close();
+    }
+  }, [open]);
+
+  return (
+    <dialog
+      ref={dialog}
+      onCancel={(event) => busy && event.preventDefault()}
+      onClose={() => open && onKeep()}
+      onClick={(event) => event.target === dialog.current && !busy && onKeep()}
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-details`}
+      data-testid="admin-cancel-dialog"
+      className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-3xl border border-white/8 bg-ink-900 p-0 text-mist-200 shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm"
+    >
+      <div className="p-6 sm:p-7">
+        <p className="eyebrow">Theater operations</p>
+        <h2 id={`${id}-title`} className="mt-1 font-display text-2xl font-semibold text-mist-50">
+          Cancel this showtime?
+        </h2>
+        <div id={`${id}-details`}>
+          <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-xl bg-ink-850/80 p-4 text-sm">
+            <dt className="text-mist-500">Movie</dt>
+            <dd className="text-mist-50" data-testid="admin-cancel-dialog-movie">{entry.movieTitle}</dd>
+            <dt className="text-mist-500">When</dt>
+            <dd className="text-mist-50" data-testid="admin-cancel-dialog-when">
+              {longDate(date)}, {localTime(entry.localStartTime)} – {localTime(entry.localEndTime)}
+            </dd>
+            <dt className="text-mist-500">Screen</dt>
+            <dd className="text-mist-50" data-testid="admin-cancel-dialog-screen">{entry.screenName}</dd>
+          </dl>
+          <p className="mt-4 text-sm leading-relaxed text-mist-400">
+            Customers will no longer be able to find or book it. This cannot be undone. Cancellation is refused if the
+            showtime has bookings, a payment in progress or seats on hold.
+          </p>
+        </div>
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button ref={keep} variant="secondary" onClick={onKeep} disabled={busy} data-testid="admin-cancel-keep">
+            Keep showtime
+          </Button>
+          <Button
+            variant="danger"
+            loading={busy}
+            onClick={onConfirm}
+            icon={<Ban className="size-4" aria-hidden />}
+            data-testid="admin-cancel-confirm"
+          >
+            Confirm cancellation
+          </Button>
+        </div>
+      </div>
+    </dialog>
   );
 }
 

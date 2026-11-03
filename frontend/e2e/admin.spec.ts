@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { USERS, createFreshShowtime, farFutureLocalStart } from './support/data.ts';
-import { localTime, openShowtimeFromDiscovery, submitLogin } from './support/ui.ts';
+import { localTime, longDate, openShowtimeFromDiscovery, submitLogin } from './support/ui.ts';
 
 const MAX_ATTEMPTS = 20;
 const MOVIE = 'Parasite';
@@ -112,6 +112,89 @@ test('a showtime scheduled on the date being viewed appears in that schedule imm
   expect(showtimeId, `No free slot after ${MAX_ATTEMPTS} attempts`).not.toBeNull();
 });
 
+test('the screens and schedule columns never overlap at any viewport width', async ({ page }) => {
+  await page.goto('/admin');
+  await page.getByTestId('admin-sign-in').click();
+  await submitLogin(page, USERS.dallasAdmin);
+  // The 14-day date strip is what used to squeeze the screens column, so it must be on screen.
+  await expect(page.getByRole('radiogroup', { name: 'Show date' })).toBeVisible();
+  await expect(page.getByTestId('admin-screen-card').first()).toBeVisible();
+
+  const screens = page.getByRole('region', { name: 'Screens' });
+  const schedule = page.getByRole('region', { name: 'Showtimes' });
+  for (const width of [375, 768, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const screensBox = (await screens.boundingBox())!;
+    const scheduleBox = (await schedule.boundingBox())!;
+    const sideBySide = screensBox.x + screensBox.width <= scheduleBox.x;
+    const stacked = screensBox.y + screensBox.height <= scheduleBox.y;
+    expect(sideBySide || stacked, `columns overlap at ${width}px`).toBe(true);
+    expect(screensBox.width, `screens column width at ${width}px`).toBeGreaterThanOrEqual(Math.min(352, width - 32));
+
+    for (const card of await page.getByTestId('admin-screen-card').all()) {
+      const box = (await card.boundingBox())!;
+      expect(box.x, `screen card left edge at ${width}px`).toBeGreaterThanOrEqual(screensBox.x - 0.5);
+      expect(box.x + box.width, `screen card right edge at ${width}px`).toBeLessThanOrEqual(screensBox.x + screensBox.width + 0.5);
+    }
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `horizontal page overflow at ${width}px`).toBeLessThanOrEqual(0);
+  }
+});
+
+test('cancelling a showtime needs confirmation: dismissing sends nothing, confirming cancels once', async ({ page, request }) => {
+  const showtime = await createFreshShowtime(request, MOVIE);
+  const cancelRequests: string[] = [];
+  page.on('request', (sent) => {
+    if (sent.method() === 'POST' && sent.url().endsWith(`/api/admin/showtimes/${showtime.showtimeId}/cancel`)) {
+      cancelRequests.push(sent.url());
+    }
+  });
+  const serverStatus = async () =>
+    ((await (await request.get(`/api/showtimes/${showtime.showtimeId}`)).json()) as { status: string }).status;
+
+  await page.goto(`/admin?theater=${showtime.theaterId}&date=${showtime.localDate}`);
+  await page.getByTestId('admin-sign-in').click();
+  await submitLogin(page, USERS.dallasAdmin);
+  const card = page.locator(`[data-testid="admin-showtime"][data-showtime-id="${showtime.showtimeId}"]`);
+  const openButton = card.getByTestId('admin-cancel-showtime');
+  const dialog = page.getByRole('dialog', { name: 'Cancel this showtime?' });
+  await expect(card).toBeVisible();
+
+  await openButton.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByTestId('admin-cancel-dialog-movie')).toHaveText(MOVIE);
+  await expect(dialog.getByTestId('admin-cancel-dialog-when')).toContainText(longDate(showtime.localDate));
+  await expect(dialog.getByTestId('admin-cancel-dialog-when')).toContainText(localTime(showtime.localStartTime));
+  await expect(dialog.getByTestId('admin-cancel-dialog-screen')).toHaveText(SCREEN);
+  await expect(dialog.getByTestId('admin-cancel-keep')).toBeFocused();
+  await dialog.getByTestId('admin-cancel-keep').click();
+  await expect(dialog).toBeHidden();
+
+  await openButton.click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(openButton).toBeFocused();
+
+  // Focus starts on "Keep showtime", so Enter right after opening is not destructive.
+  await openButton.click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeHidden();
+
+  expect(cancelRequests).toEqual([]);
+  await expect(card).toHaveAttribute('data-status', 'SCHEDULED');
+  expect(await serverStatus()).toBe('SCHEDULED');
+
+  await openButton.click();
+  await dialog.getByTestId('admin-cancel-confirm').dblclick();
+  await expect(card.getByTestId('admin-showtime-cancelled')).toBeVisible();
+  await expect(card).toHaveAttribute('data-status', 'CANCELLED');
+  await expect(dialog).toBeHidden();
+  expect(cancelRequests).toHaveLength(1);
+  expect(await serverStatus()).toBe('CANCELLED');
+});
+
 test('an admin cancels a showtime and a customer cannot book it', async ({ page, request }) => {
   const showtime = await createFreshShowtime(request, 'Parasite');
 
@@ -123,6 +206,7 @@ test('an admin cancels a showtime and a customer cannot book it', async ({ page,
   const card = page.locator(`[data-testid="admin-showtime"][data-showtime-id="${showtime.showtimeId}"]`);
   await expect(card).toBeVisible();
   await card.getByTestId('admin-cancel-showtime').click();
+  await page.getByRole('dialog', { name: 'Cancel this showtime?' }).getByTestId('admin-cancel-confirm').click();
   await expect(card.getByTestId('admin-showtime-cancelled')).toBeVisible();
   await expect(card.getByTestId('admin-cancel-showtime')).toHaveCount(0);
 

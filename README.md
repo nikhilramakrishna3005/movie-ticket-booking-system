@@ -198,11 +198,11 @@ flowchart LR
 |---|---|---|---|
 | Backend unit (JUnit 5) | 66 | Hold and payment state rules, paging, scheduling and DST, access policy, security filter chain | `cd backend && ./mvnw -B clean verify` |
 | Backend integration (Spring Boot + Testcontainers PostgreSQL 16) | 186 | Constraints, holds, payments, concurrency, discovery, admin, authorization, outbox delivery | (same command) |
-| Frontend unit (Node test runner) | 53 | API client retries and keys, payment-outcome handling, seat selection, ticket paging, admin forms | `cd frontend && npm ci && npm test` |
-| End-to-end (Playwright, Chromium) | 10 | Booking, decline then retry, seat conflict, search race, My Tickets, admin scheduling and cancellation | `cd frontend && npm run test:e2e` (stack running) |
+| Frontend unit (Node test runner) | 54 | API client retries and keys, payment-outcome handling, seat selection, ticket paging, admin forms, Discover result wording | `cd frontend && npm ci && npm test` |
+| End-to-end (Playwright, Chromium) | 12 | Booking, decline then retry, seat conflict, search race, My Tickets, admin scheduling and cancellation, cancel confirmation, admin layout at 375–1440 px | `cd frontend && npm run test:e2e` (stack running) |
 
-Latest results: **all 315 tests passed with 0 skipped** on 2026-11-03 (Task 14 final audit,
-macOS, JDK 23 targeting Java 21, Node 25.9). Details and earlier runs are in
+Latest results: **all 318 tests passed with 0 skipped** on 2026-11-03 (Task 15 UI defect fixes,
+`./run-tests.sh`, macOS, JDK 23 targeting Java 21, Node 25.9). Details and earlier runs are in
 [`docs/test-strategy.md`](docs/test-strategy.md).
 
 How the tests stay meaningful and deterministic:
@@ -274,9 +274,10 @@ Known limitations of what *is* built:
 - **Reload:** credentials and checkout state live only in memory, so a reload signs you out.
 - **Search typed just before leaving Discover:** text not yet committed to the URL (under
   300 ms) is not kept in the history entry, so Back shows Discover without it.
-- **UI defects found in the final audit, not fixed:** on the admin page between about 1024 and
-  1424 px wide, the Screens column collapses and overlaps the schedule; "Cancel showtime" has no
-  confirmation step; Discover says "1 showtimes" for a single result.
+- **UI defects found in the final audit:** fixed in Task 15, each with a regression test (admin
+  columns overlapping between about 1024 and 1424 px, one-click "Cancel showtime", and
+  "1 showtimes" on Discover); see
+  [`docs/requirements-checklist.md`](docs/requirements-checklist.md) §10–11.
 - **Sample data window:** seeded showtimes end on 2027-01-31; after that, Discover shows no
   seeded showtimes and the Playwright fixture's screen lookup fails.
 - **Ports:** host ports `3000` and `5432` must be free, or set `FRONTEND_HOST_PORT` and

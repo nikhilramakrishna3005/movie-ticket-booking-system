@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApiClient } from '../../api/client.ts';
 import type { Movie, ShowtimeSearchResult } from '../../api/types.ts';
-import { fetchShowtimes, groupByMovie, groupByTheater, uniqueGenres } from './showtimes.ts';
+import { fetchShowtimes, groupByMovie, groupByTheater, resultSummary, uniqueGenres } from './showtimes.ts';
 
 const show = (id: number, movieId: number, theaterId: number, startsAt: string): ShowtimeSearchResult =>
   ({
@@ -34,6 +34,13 @@ describe('discovery grouping', () => {
   it('groups a movie by theater', () => {
     const groups = groupByTheater([show(1, 1, 2, '2026-11-03T19:00:00Z'), show(2, 1, 1, '2026-11-03T22:30:00Z')]);
     assert.deepEqual(groups.map((group) => group.theaterName), ['Theater 1', 'Theater 2']);
+  });
+
+  it('summarizes results with singular and plural nouns', () => {
+    assert.equal(resultSummary(1, 1), '1 movie · 1 showtime');
+    assert.equal(resultSummary(0, 0), '0 movies · 0 showtimes');
+    assert.equal(resultSummary(1, 3), '1 movie · 3 showtimes');
+    assert.equal(resultSummary(4, 12), '4 movies · 12 showtimes');
   });
 
   it('lists unique genres', () => {
