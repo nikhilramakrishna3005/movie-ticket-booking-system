@@ -70,6 +70,12 @@ class OutboxDeliveryIT {
     @Autowired
     private OutboxDispatcher dispatcher;
 
+    @Autowired
+    private OutboxRelayTransactions relay;
+
+    @Autowired
+    private OutboxEventRepository outbox;
+
     @MockitoSpyBean
     private NotificationInboxWriter writer;
 
@@ -178,6 +184,82 @@ class OutboxDeliveryIT {
         assertThat(dispatcher.dispatchDue()).isOne();
         assertThat(db.count("notification_inbox")).isOne();
         assertThat(jdbc.queryForObject("SELECT last_error FROM outbox_event", String.class)).isNull();
+    }
+
+    @Test
+    void concurrentInboxWritesForTheSameEventInsertOneRow() throws Exception {
+        payAlice(seats.get(0));
+        UUID eventId = jdbc.queryForObject("SELECT id FROM outbox_event", UUID.class);
+        OutboxEvent event = outbox.findById(eventId).orElseThrow();
+        Instant now = clock.instant();
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<?>> results = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                results.add(pool.submit(() -> {
+                    start.await(5, TimeUnit.SECONDS);
+                    writer.record(event, now);
+                    return null;
+                }));
+            }
+            start.countDown();
+            for (Future<?> result : results) {
+                result.get(30, TimeUnit.SECONDS);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(db.count("notification_inbox")).isOne();
+        assertThat(jdbc.queryForObject("SELECT count(DISTINCT event_id) FROM notification_inbox", Integer.class))
+                .isOne();
+        assertThat(jdbc.queryForObject("SELECT event_id FROM notification_inbox", UUID.class)).isEqualTo(eventId);
+    }
+
+    @Test
+    void aStaleWorkerCannotAckOrFailAfterAnotherWorkerReclaims() throws Exception {
+        payAlice(seats.get(0));
+        Duration lease = Duration.ofSeconds(30);
+        List<OutboxEvent> claimedA = relay.claimDue(clock.instant(), 20, 8, lease);
+        assertThat(claimedA).hasSize(1);
+        UUID eventId = claimedA.get(0).getId();
+        UUID tokenA = claimedA.get(0).getClaimToken();
+        assertThat(tokenA).isNotNull();
+        assertThat(jdbc.queryForObject("SELECT claim_token FROM outbox_event WHERE id = ?", UUID.class, eventId))
+                .isEqualTo(tokenA);
+        assertThat(jdbc.queryForObject("SELECT published_at FROM outbox_event", Timestamp.class)).isNull();
+
+        clock.advance(lease.plusSeconds(1));
+        List<OutboxEvent> claimedB = relay.claimDue(clock.instant(), 20, 8, lease);
+        assertThat(claimedB).hasSize(1);
+        UUID tokenB = claimedB.get(0).getClaimToken();
+        assertThat(claimedB.get(0).getId()).isEqualTo(eventId);
+        assertThat(tokenB).isNotEqualTo(tokenA);
+        assertThat(jdbc.queryForObject("SELECT claim_token FROM outbox_event WHERE id = ?", UUID.class, eventId))
+                .isEqualTo(tokenB);
+        assertThat(jdbc.queryForObject("SELECT attempt_count FROM outbox_event", Integer.class)).isEqualTo(2);
+
+        assertThat(relay.markPublished(eventId, tokenA, clock.instant())).isFalse();
+        assertThat(jdbc.queryForObject("SELECT published_at FROM outbox_event", Timestamp.class)).isNull();
+        assertThat(jdbc.queryForObject("SELECT claim_token FROM outbox_event WHERE id = ?", UUID.class, eventId))
+                .isEqualTo(tokenB);
+
+        Instant staleNext = clock.instant().plusSeconds(5);
+        assertThat(relay.recordFailure(eventId, tokenA, "stale worker", staleNext)).isFalse();
+        assertThat(jdbc.queryForObject("SELECT last_error FROM outbox_event", String.class)).isNull();
+        assertThat(jdbc.queryForObject("SELECT claim_token FROM outbox_event WHERE id = ?", UUID.class, eventId))
+                .isEqualTo(tokenB);
+        assertThat(jdbc.queryForObject("SELECT next_attempt_at FROM outbox_event", Instant.class))
+                .isNotEqualTo(staleNext);
+
+        writer.record(claimedB.get(0), clock.instant());
+        assertThat(relay.markPublished(eventId, tokenB, clock.instant())).isTrue();
+        assertThat(db.count("notification_inbox")).isOne();
+        assertThat(jdbc.queryForObject("SELECT published_at IS NOT NULL FROM outbox_event", Boolean.class)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT claim_token FROM outbox_event WHERE id = ?", UUID.class, eventId))
+                .isNull();
     }
 
     @Test

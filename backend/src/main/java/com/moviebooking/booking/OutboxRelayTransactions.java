@@ -10,7 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Short outbox claim and acknowledgment transactions. The consumer runs between them, outside
- * this bean, so a slow or failing delivery does not hold the claim locks.
+ * this bean, so a slow or failing delivery does not hold the claim locks. Ack and failure
+ * updates are fenced by {@code claim_token}: a worker whose lease expired cannot mutate a
+ * row another worker has reclaimed.
  */
 @Service
 public class OutboxRelayTransactions {
@@ -31,14 +33,13 @@ public class OutboxRelayTransactions {
     }
 
     @Transactional
-    public void markPublished(UUID eventId, Instant now) {
-        OutboxEvent event = outbox.findById(eventId).orElseThrow();
-        event.markPublished(now);
+    public boolean markPublished(UUID eventId, UUID claimToken, Instant now) {
+        return outbox.acknowledgeIfOwner(eventId, claimToken, now) == 1;
     }
 
     @Transactional
-    public void recordFailure(UUID eventId, String error, Instant nextAttempt) {
-        OutboxEvent event = outbox.findById(eventId).orElseThrow();
-        event.recordFailure(error, nextAttempt);
+    public boolean recordFailure(UUID eventId, UUID claimToken, String error, Instant nextAttempt) {
+        String trimmed = error == null ? "unknown" : error.substring(0, Math.min(error.length(), 500));
+        return outbox.recordFailureIfOwner(eventId, claimToken, trimmed, nextAttempt) == 1;
     }
 }

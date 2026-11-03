@@ -62,6 +62,9 @@ public class OutboxEvent implements Persistable<UUID> {
     @Column(name = "last_error")
     private String lastError;
 
+    @Column(name = "claim_token")
+    private UUID claimToken;
+
     @Transient
     private boolean isNew;
 
@@ -85,18 +88,7 @@ public class OutboxEvent implements Persistable<UUID> {
     void claim(Instant now, Duration lease) {
         claimedUntil = now.plus(lease);
         attemptCount++;
-    }
-
-    void markPublished(Instant now) {
-        publishedAt = now;
-        claimedUntil = null;
-        lastError = null;
-    }
-
-    void recordFailure(String error, Instant nextAttempt) {
-        claimedUntil = null;
-        lastError = error == null ? "unknown" : error.substring(0, Math.min(error.length(), 500));
-        nextAttemptAt = nextAttempt;
+        claimToken = UUID.randomUUID();
     }
 
     @Override
@@ -139,6 +131,10 @@ public class OutboxEvent implements Persistable<UUID> {
 
     String getLastError() {
         return lastError;
+    }
+
+    UUID getClaimToken() {
+        return claimToken;
     }
 
     @PostLoad

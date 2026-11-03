@@ -46,7 +46,7 @@ class DatabaseSchemaIT {
         var versions = jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class);
 
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13");
     }
 
     @Test
@@ -118,6 +118,10 @@ class DatabaseSchemaIT {
 
         assertThat(due).contains("WHERE (published_at IS NULL)");
         assertThat(history).contains("(customer_id, created_at DESC, id DESC)");
+        assertThat(count("""
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_name = 'outbox_event' AND column_name = 'claim_token'
+                """)).isOne();
     }
 
     @Test

@@ -13,8 +13,10 @@ import org.springframework.stereotype.Service;
 
 /**
  * Polls unpublished outbox rows in bounded batches, hands each to {@link NotificationInboxWriter},
- * then sets {@code published_at}. Delivery is at-least-once: a crash after the inbox write and
- * before the ack is recovered by replay, which the inbox unique key makes a no-op.
+ * then sets {@code published_at} only if this worker's {@code claim_token} still owns the row.
+ * Delivery is at-least-once: a crash after the inbox write and before the ack is recovered by
+ * replay, which {@code ON CONFLICT (event_id) DO NOTHING} makes a no-op. A lease timeout does
+ * not fence in-flight work by itself; the token does.
  */
 @Service
 public class OutboxDispatcher {
@@ -62,12 +64,14 @@ public class OutboxDispatcher {
         for (OutboxEvent event : claimed) {
             try {
                 consumer.record(event, now);
-                relay.markPublished(event.getId(), now);
-                delivered++;
+                if (relay.markPublished(event.getId(), event.getClaimToken(), now)) {
+                    delivered++;
+                }
             } catch (RuntimeException ex) {
                 log.warn("outbox event {} failed (attempt {}): {}", event.getId(), event.getAttemptCount(),
                         ex.toString());
-                relay.recordFailure(event.getId(), ex.toString(), backoff.nextAttempt(now, event.getAttemptCount()));
+                relay.recordFailure(event.getId(), event.getClaimToken(), ex.toString(),
+                        backoff.nextAttempt(now, event.getAttemptCount()));
             }
         }
         return delivered;

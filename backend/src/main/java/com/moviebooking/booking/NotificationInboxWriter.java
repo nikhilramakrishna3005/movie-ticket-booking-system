@@ -2,9 +2,11 @@ package com.moviebooking.booking;
 
 import java.time.Instant;
 
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Local consumer of {@code BookingConfirmed} events. Writes {@code notification_inbox} keyed by
@@ -15,9 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationInboxWriter {
 
     private final NotificationInboxRepository inbox;
+    private final ObjectMapper json;
 
-    public NotificationInboxWriter(NotificationInboxRepository inbox) {
+    public NotificationInboxWriter(NotificationInboxRepository inbox, ObjectMapper json) {
         this.inbox = inbox;
+        this.json = json;
     }
 
     @Transactional
@@ -25,13 +29,22 @@ public class NotificationInboxWriter {
         if (!OutboxEvent.BOOKING_CONFIRMED.equals(event.getEventType())) {
             throw new IllegalArgumentException("unsupported outbox event type: " + event.getEventType());
         }
-        if (inbox.existsByEventId(event.getId())) {
-            return;
-        }
+        NotificationInbox row = NotificationInbox.fromEvent(event, now);
+        inbox.insertIgnoreDuplicate(
+                row.getId(),
+                row.getEventId(),
+                row.getCustomerId(),
+                row.getBookingId(),
+                row.getEventType(),
+                payloadJson(row),
+                row.getCreatedAt());
+    }
+
+    private String payloadJson(NotificationInbox row) {
         try {
-            inbox.saveAndFlush(NotificationInbox.fromEvent(event, now));
-        } catch (DataIntegrityViolationException duplicate) {
-            // Concurrent replay of the same event_id; the unique constraint is the backstop.
+            return json.writeValueAsString(row.getPayload());
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("could not serialize notification payload", ex);
         }
     }
 }

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -26,4 +27,31 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
             """, nativeQuery = true)
     List<OutboxEvent> lockDue(@Param("now") Instant now, @Param("maxAttempts") int maxAttempts,
             @Param("batchSize") int batchSize);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            UPDATE outbox_event
+            SET published_at = :now,
+                claimed_until = NULL,
+                last_error = NULL,
+                claim_token = NULL
+            WHERE id = :id
+              AND claim_token = :claimToken
+              AND published_at IS NULL
+            """, nativeQuery = true)
+    int acknowledgeIfOwner(@Param("id") UUID id, @Param("claimToken") UUID claimToken, @Param("now") Instant now);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            UPDATE outbox_event
+            SET claimed_until = NULL,
+                last_error = :error,
+                next_attempt_at = :nextAttempt,
+                claim_token = NULL
+            WHERE id = :id
+              AND claim_token = :claimToken
+              AND published_at IS NULL
+            """, nativeQuery = true)
+    int recordFailureIfOwner(@Param("id") UUID id, @Param("claimToken") UUID claimToken,
+            @Param("error") String error, @Param("nextAttempt") Instant nextAttempt);
 }
