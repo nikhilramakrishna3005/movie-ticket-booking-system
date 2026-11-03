@@ -226,7 +226,8 @@ Each criterion should map to at least one automated test once implemented (see
   `PENDING` attempt, and is tested by simulating that state rather than killing the process.
 - F10 behaves as documented: nobody polls, so the attempt stays unresolved.
 
-**Deferred (not implemented):**
+**Deferred (not implemented):** the main items are below. The complete list, with the reason
+for each and what was built instead, is in [`docs/deferred-scope.md`](deferred-scope.md).
 
 | Feature | Why / where recorded |
 |---|---|

@@ -671,8 +671,10 @@ stack.
   On the sample data this accepts one-character typos and partial names ("Intersteller",
   "Starlite", "Galeria") and rejects unrelated text. Results with `q` are ranked by the higher
   of the two similarities, then start time; without `q`, by start time, theater name and id.
-  Whether PostgreSQL actually uses the V6 GIN indexes for these operators at scale has **not**
-  been measured (no `EXPLAIN` analysis or load test).
+  In the Task 14 audit, `EXPLAIN` on the sample data (1,306 showtimes) showed the planner
+  narrowing by date with `showtime_scheduled_starts_at_idx` and applying the trigram match as a
+  filter, so the V6 GIN indexes were not used at that size. Their use at scale has **not** been
+  measured (no load test).
 - Filters: `cityId`, `movieId`, `language` (code), `genre` (name, case-insensitive), and a
   **local** date. Only `SCHEDULED` showtimes that start after the clock's `now` are listed.
 - **Local dates:** each city has an IANA `time_zone` (V9). The date filter is the half-open UTC
@@ -732,6 +734,7 @@ and Kafka would be added only when measurements justify them (ADRs 0001–0003).
 | Task 11 (2026-11-03) | On a Mac (JDK 23, Docker Desktop): backend 64/64 unit and 158/158 integration tests, frontend 50/50 unit tests, Playwright 8/8 and 24/24 with `--repeat-each=3` against the running Compose stack, rebuilt in place (no volume reset). Booking `9956RB4M` kept. No new Flyway migration. See `docs/test-strategy.md`. |
 | Task 12 (2026-11-03) | On a Mac (JDK 23, Docker Desktop): backend 64/64 unit and 174/174 integration tests, frontend 52/52 unit tests and the build, Playwright 9/9 and 27/27 with `--repeat-each=3` against the running Compose stack, rebuilt in place (no volume reset). Booking `9956RB4M` kept. Flyway V11 seeded Playwright-only customers. See `docs/test-strategy.md`. |
 | Task 13 (2026-11-03) | On a Mac (JDK 23, Docker Desktop): backend 66/66 unit and 186/186 integration tests after the claim-token / ON CONFLICT review fix, frontend 53/53 unit tests and the build, Playwright 9/9, `./run-tests.sh` exit 0. Booking `9956RB4M` kept. Flyway V13. |
+| Task 14 (2026-11-03) | On a Mac (JDK 23, Docker Desktop): `./run-tests.sh` exit 0 with backend 66/66 unit and 186/186 integration tests, frontend 53/53, Playwright 10/10. Two fixes (admin schedule refresh with a Playwright regression; `run-tests.sh` skip guard on Node 23+). Flyway V1–V13 applied to a disposable empty database. Booking `9956RB4M` kept. A documentation and presentation pass added `docs/deferred-scope.md`. See `docs/test-strategy.md`. |
 | Required documentation | Complete in the final audit: `README.md`, `docs/requirements-checklist.md`, `docs/data-model.md`, `docs/api.md`, `docs/test-strategy.md`, and updates to this file, the product scope, the ADRs and the AI workflow record. |
 
 Update this table only after a phase's verification checkpoint has actually passed.

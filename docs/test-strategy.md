@@ -197,6 +197,16 @@ These numbers are from one short run on one machine with warm caches and no writ
 that the hot reads are index-backed at sample size; they are not a capacity claim. The path to
 the stated scale is in `docs/architecture.md` §12.
 
+**Documentation audit re-run.** After the documentation and presentation pass on the same
+branch (documentation only; no application code or test changed), on the same Mac and stack:
+
+| Command | Result |
+|---|---|
+| `./run-tests.sh` (stack running) | Exit 0 in 82 s. Backend 66 unit and 186 integration (0 failures, 0 errors, 0 skipped; Maven 1:05 min), frontend 53/53 (0 skipped), Playwright 10 passed in 11.5 s |
+| `cd frontend && npm run build` | Exit 0, with the same over-500 kB chunk warning |
+| Stack and data | All three services healthy; Flyway at V13; booking `9956RB4M` still `CONFIRMED` |
+| Markdown links | Every relative link, anchor and repository path cited in `README.md`, `AGENTS.md` and `docs/` resolves (checked with a script) |
+
 ## Task 13 review fixes (2026-11-03)
 
 Run on the same Mac and branch after fencing `claim_token` (Flyway V13) and replacing the inbox

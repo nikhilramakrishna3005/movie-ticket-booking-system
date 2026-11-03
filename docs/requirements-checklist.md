@@ -136,7 +136,7 @@
 | Document | Status | Location |
 |---|---|---|
 | README: overview, prerequisites, one-command start, demo accounts, screenshots, tests, structure, limitations | Complete | `README.md` |
-| Product scope and deferred features | Complete | `docs/product-scope.md` (§4 non-goals, §8 delivery status) |
+| Product scope and deferred features | Complete | `docs/product-scope.md` (§4 non-goals, §8 delivery status); `docs/deferred-scope.md` (every omitted feature, the reason, and what was built instead) |
 | Roles and permissions matrix | Complete | `docs/architecture.md` §8.1 (marked as implemented or not) |
 | Architecture diagram and booking/payment flow | Complete | `docs/architecture.md` §2, §6.3, §6.4 |
 | ERD matching V1–V13 | Complete | `docs/data-model.md` |
@@ -234,6 +234,9 @@ A clean `docker compose down -v` start was not run for Task 13, to keep the loca
 A clean `docker compose down -v` start was not run for Task 14, to keep the local database.
 
 ## 11. Remaining gaps (honest summary)
+
+Deliberately omitted features are listed, with reasons and what was built instead, in
+`docs/deferred-scope.md`. The gaps in what was built are:
 
 - Not implemented: hold-cleanup sweeper, scheduled payment reconciliation;
   customer booking cancellation / refunds. Kafka remains deferred (ADR 0002).
