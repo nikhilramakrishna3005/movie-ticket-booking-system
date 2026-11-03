@@ -200,6 +200,8 @@ class ApplicationContextWithoutDatabaseTest {
         mockMvc.perform(put("/api/admin/screens/1/layout").with(httpBasic("carol", PASSWORD))
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/admin/showtimes/1/cancel").with(httpBasic("carol", PASSWORD)))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -239,6 +241,8 @@ class ApplicationContextWithoutDatabaseTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"seatIds\":[1]}"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(delete("/api/holds/{id}", UUID.randomUUID()).with(httpBasic("dana", PASSWORD)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/holds/{id}", UUID.randomUUID()).with(httpBasic("dana", PASSWORD)))
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(showtimes, seats, showSeats, holds);
@@ -312,6 +316,8 @@ class ApplicationContextWithoutDatabaseTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/admin/theaters")).andExpect(status().isUnauthorized());
         mockMvc.perform(put("/api/admin/screens/1/layout").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/admin/showtimes/1/cancel"))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(holds, paymentAttempts, provider);

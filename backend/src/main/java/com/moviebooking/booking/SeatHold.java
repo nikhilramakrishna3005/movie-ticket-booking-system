@@ -98,6 +98,17 @@ public class SeatHold implements Persistable<UUID> {
         return !expiresAt.isAfter(now);
     }
 
+    /**
+     * Status as the owner should see it at {@code now}. An ACTIVE row past {@code expiresAt} is
+     * EXPIRED even if no writer has touched it yet (lazy expiry). Does not change the stored row.
+     */
+    public HoldStatus effectiveStatusAt(Instant now) {
+        if (status == HoldStatus.ACTIVE && isExpiredAt(now)) {
+            return HoldStatus.EXPIRED;
+        }
+        return status;
+    }
+
     void expire() {
         requireActive();
         status = HoldStatus.EXPIRED;

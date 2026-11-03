@@ -87,4 +87,9 @@ public class Showtime {
     public boolean isOpenForHoldsAt(Instant now) {
         return status == ShowtimeStatus.SCHEDULED && startsAt.isAfter(now);
     }
+
+    /** Idempotent: a cancelled showtime stays cancelled. Inventory and bookings are not touched. */
+    void cancel() {
+        status = ShowtimeStatus.CANCELLED;
+    }
 }

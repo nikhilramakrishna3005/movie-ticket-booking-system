@@ -191,7 +191,13 @@ export function SeatsPage() {
         <section aria-label="Seat map" className="surface min-w-0 p-4 sm:p-8">
           {seatMap.data && detail.data ? (
             <>
-              {closed && <div className="mb-6"><StateMessage tone="warning" title="This showtime was cancelled">Seats can no longer be held.</StateMessage></div>}
+              {closed && (
+                <div className="mb-6">
+                  <StateMessage tone="warning" title="This showtime was cancelled" testId="showtime-cancelled">
+                    Seats can no longer be held.
+                  </StateMessage>
+                </div>
+              )}
               <SeatMap seats={seats} selected={selected} onToggle={toggle} disabled={closed || holding || adminViewer} />
               <div className="mt-8 flex flex-col items-center gap-4">
                 <SeatLegend prices={detail.data.prices} />

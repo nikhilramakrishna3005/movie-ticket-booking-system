@@ -38,19 +38,98 @@ export function CheckoutPage() {
   const { sessions } = useCheckoutSessions();
   const session = sessions[holdId];
 
-  // Sessions are cleared on sign-out, so a session without a user only happens while re-signing
-  // in after a 401. Checkout stays mounted then, keeping the current attempt's idempotency key.
-  if (!session || (user && user.username !== session.ownerUsername)) {
+  // A session without a user is the 401 re-login path: checkout stays mounted so the current
+  // attempt's idempotency key is kept. Credentials are never written to storage.
+  if (session && (!user || user.username === session.ownerUsername)) {
+    return <Checkout session={session} />;
+  }
+  return <RecoverCheckout holdId={holdId} />;
+}
+
+function RecoverCheckout({ holdId }: { holdId: string }) {
+  const { user, api, requestLogin } = useAuth();
+  const { saveSession } = useCheckoutSessions();
+  const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    if (user.role !== 'CUSTOMER') {
+      setMessage('Theater admin accounts cannot continue a customer checkout.');
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setMessage(null);
+    void (async () => {
+      try {
+        const sentAt = Date.now();
+        const response = await api.getHold(holdId);
+        const receivedAt = Date.now();
+        if (cancelled) return;
+        const hold = response.data;
+        if (hold.status !== 'ACTIVE') {
+          setMessage(
+            hold.status === 'CONVERTED'
+              ? 'This hold was already converted into a booking. Open My Tickets to see it.'
+              : hold.status === 'EXPIRED'
+                ? 'This hold has expired. The seats are available again on the seat map.'
+                : 'This hold was released. Pick seats again from the seat map.',
+          );
+          return;
+        }
+        const [showtime, seatMap] = await Promise.all([api.showtime(hold.showtimeId), api.seatMap(hold.showtimeId)]);
+        if (cancelled) return;
+        const seats = seatMap.seats.filter((seat) => hold.seatIds.includes(seat.seatId));
+        const skewMs = response.serverDate ? response.serverDate.getTime() + 500 - (sentAt + receivedAt) / 2 : 0;
+        saveSession({ hold, showtime, seats, skewMs, ownerUsername: user.username });
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof ApiError && error.status === 404) {
+          setMessage('This checkout is no longer open. The hold may belong to another customer, or it was never created.');
+          return;
+        }
+        setMessage(describeError(error));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, holdId, api, saveSession]);
+
+  if (!user) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20">
-        <StateMessage block title="This checkout is no longer open" testId="checkout-missing" action={<ButtonLink to="/">Browse showtimes</ButtonLink>}>
-          Checkout details live only in this tab's memory, so they are gone after a reload or sign-out. Any seats you held are
-          released automatically when the hold expires.
+        <StateMessage
+          block
+          title="Sign in to continue this checkout"
+          testId="checkout-sign-in"
+          action={<Button onClick={() => void requestLogin()} data-testid="checkout-sign-in-button">Sign in</Button>}
+        >
+          Cinéva keeps your password in memory only, so a reload always asks you to sign in again. Signing in does not
+          extend the hold; if it has expired the seats go back on sale.
         </StateMessage>
       </div>
     );
   }
-  return <Checkout session={session} />;
+  if (loading && !message) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-20">
+        <StateMessage block title="Looking up your hold" testId="checkout-recovering">
+          Checking the current state of this hold without extending it.
+        </StateMessage>
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-20">
+      <StateMessage block title="This checkout is no longer open" testId="checkout-missing" action={<ButtonLink to="/">Browse showtimes</ButtonLink>}>
+        {message ?? 'Checkout details live only in this tab’s memory after a reload, and this hold could not be restored.'}
+      </StateMessage>
+    </div>
+  );
 }
 
 function Checkout({ session }: { session: CheckoutSession }) {

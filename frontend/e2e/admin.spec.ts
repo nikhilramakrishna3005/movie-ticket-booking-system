@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { USERS, farFutureLocalStart } from './support/data.ts';
+import { USERS, createFreshShowtime, farFutureLocalStart } from './support/data.ts';
 import { localTime, openShowtimeFromDiscovery, submitLogin } from './support/ui.ts';
 
 const MAX_ATTEMPTS = 20;
@@ -79,4 +79,33 @@ test('an admin schedules a showtime that then appears in public discovery', asyn
     premiumPrice: 16,
   });
   await expect(page.getByTestId('continue-button')).toBeVisible();
+});
+
+test('an admin cancels a showtime and a customer cannot book it', async ({ page, request }) => {
+  const showtime = await createFreshShowtime(request, 'Parasite');
+
+  await page.goto(`/admin?theater=${showtime.theaterId}&date=${showtime.localDate}`);
+  await page.getByTestId('admin-sign-in').click();
+  await submitLogin(page, USERS.dallasAdmin);
+  await expect(page.getByTestId('admin-dashboard')).toBeVisible();
+
+  const card = page.locator(`[data-testid="admin-showtime"][data-showtime-id="${showtime.showtimeId}"]`);
+  await expect(card).toBeVisible();
+  await card.getByTestId('admin-cancel-showtime').click();
+  await expect(card.getByTestId('admin-showtime-cancelled')).toBeVisible();
+  await expect(card.getByTestId('admin-cancel-showtime')).toHaveCount(0);
+
+  await page.getByTestId('nav-logout-button').click();
+  await expect(page.getByTestId('nav-login-button')).toBeVisible();
+
+  const listed = await request.get(
+    `/api/showtimes?cityId=${showtime.cityId}&date=${showtime.localDate}&movieId=${showtime.movieId}&size=50`,
+  );
+  expect(listed.status()).toBe(200);
+  const ids = ((await listed.json()) as { items: Array<{ showtimeId: number }> }).items.map((item) => item.showtimeId);
+  expect(ids).not.toContain(showtime.showtimeId);
+
+  await page.goto(`/showtimes/${showtime.showtimeId}/seats`);
+  await expect(page.getByTestId('showtime-cancelled')).toBeVisible();
+  await expect(page.getByTestId('continue-button')).toBeDisabled();
 });

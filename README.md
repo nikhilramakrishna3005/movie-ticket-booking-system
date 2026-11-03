@@ -68,13 +68,15 @@ docker compose down                                             # stop (keeps da
 ## Demo accounts (fictional, local only)
 
 > These accounts are **fictional, intentionally public and for local assessment use only**. They are
-> seeded by `backend/src/main/resources/db/migration/V8__demo_users.sql` (BCrypt hashes) and must
+> seeded by Flyway `V8__demo_users.sql` and `V11__e2e_test_users.sql` (BCrypt hashes) and must
 > never be used in a real deployment. They are not real credentials.
 
 | Username | Password | Role | Assigned theater |
 |---|---|---|---|
 | `alice` | `alice-demo-pass` | Customer | — |
 | `bob` | `bob-demo-pass` | Customer | — |
+| `e2e.alice` | `e2e-alice-demo-pass` | Customer (Playwright only) | — |
+| `e2e.bob` | `e2e-bob-demo-pass` | Customer (Playwright only) | — |
 | `admin.dallas` | `dallas-admin-demo` | Theater admin | Starlight Cinemas Downtown |
 | `admin.houston` | `houston-admin-demo` | Theater admin | Bayou Picture House |
 
@@ -106,8 +108,9 @@ or `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
   bookings, newest first, each opening its ticket. Like the sign-in, the list is kept in memory
   only, so a reload or sign-out asks you to sign in again.
 - Admin (`/admin`, "Admin" in the header for theater-admin accounts): assigned theaters only,
-  screens and seating plans, a day's showtimes, and a form to schedule a showtime. Customer-only
-  actions such as holding seats are hidden.
+  screens and seating plans, a day's showtimes, a form to schedule a showtime, and cancellation
+  of a show that has no bookings, unresolved payments or live holds. Customer-only actions such
+  as holding seats are hidden.
 
 **Backend (Spring Boot, `backend/`):** a modular monolith with packages `catalog`, `theater`,
 `booking`, `payment`, `admin` and `security`.
@@ -118,16 +121,25 @@ or `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
 - **Database backstops:** constraints such as `UNIQUE (showtime_id, seat_id)` on booked seats.
 - **Admin:** theater-scoped showtime creation, with overlaps rejected by an exclusion
   constraint; assigned-theater reads; adding a screen; replacing a layout only before the
-  screen's first showtime.
+  screen's first showtime; cancelling a showtime that has no bookings, unresolved payments or
+  live holds (no fake refunds, no row deletion).
 - **Booking history:** `GET /api/bookings` lists only the caller's confirmed bookings, paginated
   (size capped at 50). The customer comes from the credentials, never from a parameter.
+- **Hold lookup:** `GET /api/holds/{id}` returns the owner's current hold state from the injected
+  Clock without extending expiry. Other customers get 404.
 
 **Not implemented (by design or cut for time):**
-- Showtime cancellation.
-- `GET /api/holds/{id}`, and booking cancellation.
+- Customer booking cancellation and refunds.
 - Background workers: hold cleanup, outbox relay, payment reconciliation. The outbox is written
   but not delivered.
 - Redis, Kafka and Solr, which are deferred by the ADRs.
+
+**Honest limitations of this task:**
+- Reloading the React app still signs you out. Credentials are never written to
+  `localStorage` / `sessionStorage` / cookies / IndexedDB. After a reload, checkout can look the
+  hold up again only once you sign in.
+- Cancellation refuses while a simulated payment is `PENDING` or `UNKNOWN`. If that attempt then
+  captures, the show has bookings and cannot be cancelled; Cinéva does not void or refund it.
 
 The full status is in [`docs/requirements-checklist.md`](docs/requirements-checklist.md).
 
@@ -172,7 +184,7 @@ cd frontend && npm ci && npx playwright install --with-deps chromium && npm run 
 
 What each suite proves, and the latest results, are in
 [`docs/test-strategy.md`](docs/test-strategy.md). The latest results were 64 backend unit tests,
-142 integration tests, 40 frontend unit tests and 6 Playwright tests, all passing, on
+174 integration tests, 52 frontend unit tests and 9 Playwright tests, all passing, on
 2026-11-03.
 
 ## Repository structure
@@ -181,7 +193,7 @@ What each suite proves, and the latest results, are in
 backend/                 Spring Boot application (Maven wrapper, Dockerfile)
   src/main/java/com/moviebooking/
     catalog/ theater/ booking/ payment/ admin/ security/ config/
-  src/main/resources/db/migration/   Flyway V1–V10 (schema, sample data, demo users, indexes)
+  src/main/resources/db/migration/   Flyway V1–V11 (schema, sample data, demo and Playwright users, indexes)
   src/test/java/         JUnit unit tests (*Test) and Testcontainers integration tests (*IT)
 frontend/                React + TypeScript + Vite app, nginx config, Dockerfile
   src/                   pages, components, features, API client, unit tests (*.test.ts)
@@ -208,8 +220,9 @@ AGENTS.md                assignment constraints and working rules
   shows Discover without it.
 - **My Tickets:** confirmed bookings only (there is no cancellation). It loads 10 at a time,
   and "Show older tickets" loads the next 10; there is no search or filter.
-- **Reload during checkout:** checkout state lives only in memory, so a reload returns you to
-  browsing and the hold simply expires.
+- **Reload during checkout:** credentials and checkout state live only in memory, so a reload
+  signs you out. After you sign in again, checkout can recover an ACTIVE hold via
+  `GET /api/holds/{id}`. Passwords are never stored to skip that sign-in.
 - **Port conflicts:** host ports `3000` (frontend) and `5432` (PostgreSQL) must be free, or set
   `FRONTEND_HOST_PORT` and `POSTGRES_HOST_PORT` in `.env`.
 

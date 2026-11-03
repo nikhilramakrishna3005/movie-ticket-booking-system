@@ -23,6 +23,8 @@ public interface ShowSeatRepository extends JpaRepository<ShowSeat, ShowSeat.Key
 
     List<ShowSeat> findByBookingIdInOrderBySeatId(Collection<UUID> bookingIds);
 
+    long countByShowtimeIdAndStatus(long showtimeId, ShowSeatStatus status);
+
     @Query(value = """
             SELECT * FROM show_seat
             WHERE showtime_id = :showtimeId AND seat_id IN (:seatIds)
@@ -45,6 +47,14 @@ public interface ShowSeatRepository extends JpaRepository<ShowSeat, ShowSeat.Key
             ORDER BY seat_id
             FOR UPDATE""", nativeQuery = true)
     List<ShowSeat> lockHeldBy(@Param("showtimeId") long showtimeId, @Param("holdId") UUID holdId);
+
+    /** Remaining HELD inventory of a show, locked in seat_id order after the show's hold rows. */
+    @Query(value = """
+            SELECT * FROM show_seat
+            WHERE showtime_id = :showtimeId AND status = 'HELD'
+            ORDER BY seat_id
+            FOR UPDATE""", nativeQuery = true)
+    List<ShowSeat> lockHeldOnShowtime(@Param("showtimeId") long showtimeId);
 
     /**
      * Bounds every lock wait in the current transaction (the {@code true} argument makes it

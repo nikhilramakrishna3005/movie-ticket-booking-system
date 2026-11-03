@@ -47,6 +47,9 @@ class HoldRulesTest {
         assertThat(hold.getStatus()).isEqualTo(HoldStatus.ACTIVE);
         assertThat(hold.isExpiredAt(EXPIRES.minusNanos(1000))).isFalse();
         assertThat(hold.isExpiredAt(EXPIRES)).isTrue();
+        assertThat(hold.effectiveStatusAt(EXPIRES.minusNanos(1000))).isEqualTo(HoldStatus.ACTIVE);
+        assertThat(hold.effectiveStatusAt(EXPIRES)).isEqualTo(HoldStatus.EXPIRED);
+        assertThat(hold.getStatus()).as("effective status does not write").isEqualTo(HoldStatus.ACTIVE);
     }
 
     @Test

@@ -1,9 +1,14 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 
-/** Public, local-only demo accounts seeded by Flyway V8 (listed in the README). Never real credentials. */
+/**
+ * Public, local-only demo accounts seeded by Flyway (listed in the README). Never real credentials.
+ * Playwright booking tests use e2e.alice / e2e.bob so Alice and Bob's My Tickets stay for manual use.
+ */
 export const USERS = {
   alice: { username: 'alice', password: 'alice-demo-pass' },
   bob: { username: 'bob', password: 'bob-demo-pass' },
+  e2eAlice: { username: 'e2e.alice', password: 'e2e-alice-demo-pass' },
+  e2eBob: { username: 'e2e.bob', password: 'e2e-bob-demo-pass' },
   dallasAdmin: { username: 'admin.dallas', password: 'dallas-admin-demo' },
 } as const;
 
@@ -23,6 +28,7 @@ export interface FreshShowtime {
   movieId: number;
   movieTitle: string;
   cityId: number;
+  theaterId?: number;
   theaterName: string;
   theaterAddress: string;
   localDate: string;
@@ -111,7 +117,7 @@ export async function createFreshShowtime(request: APIRequestContext, movieTitle
     const detail = await json<{
       localDate: string;
       localStartTime: string;
-      theater: { name: string; address: string; city: { id: number } };
+      theater: { id: number; name: string; address: string; city: { id: number } };
       prices: Array<{ category: string; price: number }>;
     }>(request, `/api/showtimes/${created.showtimeId}`);
     const priceOf = (category: string) => detail.prices.find((entry) => entry.category === category)?.price ?? NaN;
@@ -120,6 +126,7 @@ export async function createFreshShowtime(request: APIRequestContext, movieTitle
       movieId: movie.id,
       movieTitle: movie.title,
       cityId: detail.theater.city.id,
+      theaterId: detail.theater.id,
       theaterName: detail.theater.name,
       theaterAddress: detail.theater.address,
       localDate: detail.localDate,

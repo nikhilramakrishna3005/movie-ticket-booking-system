@@ -1,7 +1,7 @@
 # Data Model
 
 > **Status: IMPLEMENTED.** This document describes the schema created by the committed Flyway
-> migrations `V1`–`V10` in `backend/src/main/resources/db/migration/`. It was written from those
+> migrations `V1`–`V11` in `backend/src/main/resources/db/migration/`. It was written from those
 > files; if they disagree, the migrations are authoritative. Hibernate runs with
 > `ddl-auto: validate`, so the JPA entities must match this schema at startup.
 
@@ -17,6 +17,7 @@
 | `V8__demo_users.sql` | Four public demo users (BCrypt hashes) and two theater-admin assignments |
 | `V9__city_time_zone.sql` | `city.time_zone` (IANA zone id) |
 | `V10__booking_history_index.sql` | `booking_customer_history_idx (customer_id, created_at DESC, id DESC)` for `GET /api/bookings`; drops `booking_customer_idx`, which was its prefix |
+| `V11__e2e_test_users.sql` | Playwright-only customers `e2e.alice` and `e2e.bob` (BCrypt hashes); Alice and Bob are unchanged |
 
 ## Entity-relationship diagram
 
@@ -224,5 +225,6 @@ measured at scale.
 
 - `outbox_event`: a `BookingConfirmed` row is written in the booking transaction. No relay reads
   it, so `published_at` stays `NULL` (no background worker; ADR 0002).
-- `showtime.status = 'CANCELLED'`: allowed by the schema and honored by search, holds and
-  confirmation. Tests create it directly; no API cancels a showtime.
+- `showtime.status = 'CANCELLED'`: set by `POST /api/admin/showtimes/{id}/cancel` when the show
+  has no bookings, no unresolved payments and no live holds. Search, holds and confirmation
+  already honoured the status. Inventory and historical rows are never deleted.

@@ -29,9 +29,9 @@ import com.moviebooking.theater.Showtime;
 import com.moviebooking.theater.TheaterService;
 
 /**
- * Creates and releases seat holds (docs/architecture.md §5). Every transaction that locks both
- * kinds of row locks the seat_hold row first, then show_seat rows in ascending seat_id order, and
- * waits at most {@code booking.lock-timeout} for any lock.
+ * Creates, reads and releases seat holds (docs/architecture.md §5). Creating a hold locks the
+ * showtime row first so it cannot race a cancellation, then the customer's seat_hold row, then
+ * show_seat rows in ascending seat_id order, waiting at most {@code booking.lock-timeout}.
  */
 @Service
 public class HoldService {
@@ -42,17 +42,19 @@ public class HoldService {
 
     private final SeatHoldRepository holds;
     private final ShowSeatRepository showSeats;
+    private final BookingRepository bookings;
     private final TheaterService theaterService;
     private final PaymentAttemptService payments;
     private final Clock clock;
     private final Duration holdTtl;
     private final String lockTimeout;
 
-    public HoldService(SeatHoldRepository holds, ShowSeatRepository showSeats, TheaterService theaterService,
-            PaymentAttemptService payments, Clock clock, @Value("${booking.hold-ttl}") Duration holdTtl,
-            @Value("${booking.lock-timeout}") Duration lockTimeout) {
+    public HoldService(SeatHoldRepository holds, ShowSeatRepository showSeats, BookingRepository bookings,
+            TheaterService theaterService, PaymentAttemptService payments, Clock clock,
+            @Value("${booking.hold-ttl}") Duration holdTtl, @Value("${booking.lock-timeout}") Duration lockTimeout) {
         this.holds = holds;
         this.showSeats = showSeats;
+        this.bookings = bookings;
         this.theaterService = theaterService;
         this.payments = payments;
         this.clock = clock;
@@ -70,13 +72,13 @@ public class HoldService {
         // timestamptz stores microseconds; truncating keeps the returned expiry identical to the stored one.
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 
-        Showtime showtime = theaterService.getShowtime(showtimeId);
+        showSeats.setLocalLockTimeout(lockTimeout);
+        // Showtime lock first so a concurrent cancellation cannot commit between this check and the insert.
+        Showtime showtime = theaterService.lockShowtime(showtimeId);
         if (!showtime.isOpenForHoldsAt(now)) {
             throw ApiException.conflict("SHOWTIME_CLOSED", "The showtime has started or was cancelled",
                     Map.of("showtimeId", showtimeId));
         }
-
-        showSeats.setLocalLockTimeout(lockTimeout);
 
         // Lock order step 1: the customer's ACTIVE hold row for this showtime, if any.
         UUID staleHoldId = null;
@@ -136,6 +138,20 @@ public class HoldService {
     }
 
     /**
+     * Current state of the caller's hold. Other customers' holds look nonexistent. The stored
+     * expiry is not extended, and an overdue ACTIVE row is reported as EXPIRED without writing.
+     */
+    @Transactional(readOnly = true)
+    public HoldResult getHold(AuthenticatedUser customer, UUID holdId) {
+        Instant now = clock.instant();
+        SeatHold hold = holds.findById(holdId).orElseThrow(ResourceNotFoundException::new);
+        AccessPolicy.requireOwner(customer, hold.getCustomerId());
+        List<Long> seatIds = seatsOf(hold);
+        return new HoldResult(hold.getId(), hold.getShowtimeId(), seatIds, hold.effectiveStatusAt(now),
+                hold.getExpiresAt());
+    }
+
+    /**
      * Releases the caller's hold. Holds of other customers are reported as not found. Releasing a
      * hold that is already released or expired changes nothing.
      */
@@ -169,6 +185,21 @@ public class HoldService {
                 }
             }
         }
+    }
+
+    /**
+     * Seats currently tagged with this hold, or the booked seats if it was already converted.
+     * Released and expired holds that no longer own inventory return an empty list.
+     */
+    private List<Long> seatsOf(SeatHold hold) {
+        List<Long> held = showSeats.findByHoldIdOrderBySeatId(hold.getId()).stream().map(ShowSeat::getSeatId).toList();
+        if (!held.isEmpty() || hold.getStatus() != HoldStatus.CONVERTED) {
+            return held;
+        }
+        return bookings.findByHoldId(hold.getId())
+                .map(booking -> showSeats.findByBookingIdOrderBySeatId(booking.getId()).stream()
+                        .map(ShowSeat::getSeatId).toList())
+                .orElse(List.of());
     }
 
     private static Set<Long> validateSelection(List<Long> seatIds) {

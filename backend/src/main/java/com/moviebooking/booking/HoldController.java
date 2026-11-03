@@ -42,6 +42,11 @@ public class HoldController {
         return holdService.createHold(customer, showtimeId, request.seatIds());
     }
 
+    @GetMapping("/holds/{holdId}")
+    public HoldResult getHold(@AuthenticationPrincipal AuthenticatedUser customer, @PathVariable UUID holdId) {
+        return holdService.getHold(customer, holdId);
+    }
+
     @DeleteMapping("/holds/{holdId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void releaseHold(@AuthenticationPrincipal AuthenticatedUser customer, @PathVariable UUID holdId) {

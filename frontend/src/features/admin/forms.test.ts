@@ -118,6 +118,9 @@ describe('admin errors', () => {
     assert.match(describeAdminError(new ApiError(409, 'SCREEN_BUSY', 'busy')), /busy/i);
     assert.match(describeAdminError(new ApiError(409, 'SCREEN_NAME_TAKEN', 'taken')), /already exists/i);
     assert.match(describeAdminError(new ApiError(409, 'SCREEN_HAS_SHOWTIMES', 'locked')), /can no longer change/i);
+    assert.match(describeAdminError(new ApiError(409, 'SHOWTIME_HAS_BOOKINGS', 'booked')), /confirmed bookings/i);
+    assert.match(describeAdminError(new ApiError(409, 'SHOWTIME_HAS_UNRESOLVED_PAYMENTS', 'pay')), /in progress/i);
+    assert.match(describeAdminError(new ApiError(409, 'SHOWTIME_HAS_ACTIVE_HOLDS', 'held')), /on hold/i);
     assert.match(describeAdminError(new ApiError(400, 'INVALID_START_TIME', 'past')), /daylight-saving|past/i);
   });
 

@@ -151,7 +151,7 @@ cut is recorded in the README's known limitations.
 2. Background workers: hold-cleanup sweeper, outbox relay, scheduled payment reconciliation.
    Correctness does not depend on them (lazy expiry; on-demand `resolve`; outbox rows are still
    written and asserted in tests).
-3. Admin showtime cancellation.
+3. ~~Admin showtime cancellation.~~ Implemented in Task 12 (`POST /api/admin/showtimes/{id}/cancel`).
 4. "My bookings" page (the confirmation page is sufficient).
 5. Live seat-map refresh/polling (refresh on navigation only).
 6. Search ranking polish (keep filters plus basic trigram similarity).

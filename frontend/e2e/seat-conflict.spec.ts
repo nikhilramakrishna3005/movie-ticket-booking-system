@@ -7,12 +7,12 @@ test('a seat taken by another customer is removed from the selection and the res
 
   await openShowtimeFromDiscovery(page, showtime);
   await page.getByTestId('nav-login-button').click();
-  await submitLogin(page, USERS.alice);
+  await submitLogin(page, USERS.e2eAlice);
   await selectSeats(page, ['B2', 'B3']);
 
   // Bob holds B2 after Alice's map was loaded, so her view of B2 is stale when she continues.
   const b2 = (await seatStates(request, showtime.showtimeId)).find((s) => seatName(s) === 'B2')!;
-  await holdSeatsViaApi(request, USERS.bob, showtime.showtimeId, [b2.seatId]);
+  await holdSeatsViaApi(request, USERS.e2eBob, showtime.showtimeId, [b2.seatId]);
 
   await page.getByTestId('continue-button').click();
   await expect(page.getByTestId('seat-error')).toContainText('Someone just took some of those seats');

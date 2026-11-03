@@ -43,6 +43,11 @@ public class PaymentAttemptService {
                 .map(PaymentView::of);
     }
 
+    /** PENDING or UNKNOWN attempts whose hold belongs to this showtime. */
+    public long countInFlightForShowtime(long showtimeId) {
+        return attempts.countInFlightForShowtime(showtimeId);
+    }
+
     public long countForHold(UUID holdId) {
         return attempts.countByHoldId(holdId);
     }

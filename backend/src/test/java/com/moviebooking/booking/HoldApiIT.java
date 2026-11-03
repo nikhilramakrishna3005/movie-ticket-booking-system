@@ -2,6 +2,7 @@ package com.moviebooking.booking;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -10,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.LongStream;
@@ -283,7 +285,88 @@ class HoldApiIT {
         release(DALLAS_ADMIN, UUID.randomUUID()).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/showtimes/{id}/seats", showtime).with(DALLAS_ADMIN))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/api/holds/{id}", UUID.randomUUID()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/holds/{id}", UUID.randomUUID()).with(DALLAS_ADMIN))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
         assertThat(db.holdCount()).isZero();
+    }
+
+    @Test
+    void ownerCanReadAHoldWithoutExtendingIt() throws Exception {
+        UUID holdId = holdId(hold(ALICE, seats.get(2), seats.get(0)).andExpect(status().isCreated()));
+        Instant expiresAt = TestClockConfiguration.START.plus(TTL);
+
+        mockMvc.perform(get("/api/holds/{id}", holdId).with(ALICE))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.holdId").value(holdId.toString()))
+                .andExpect(jsonPath("$.showtimeId").value((int) showtime))
+                .andExpect(jsonPath("$.seatIds", contains(seats.get(0).intValue(), seats.get(2).intValue())))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.expiresAt").value(expiresAt.toString()))
+                .andExpect(jsonPath("$.paymentId").doesNotExist())
+                .andExpect(jsonPath("$.idempotencyKey").doesNotExist())
+                .andExpect(jsonPath("$.scenario").doesNotExist());
+
+        clock.advance(Duration.ofMinutes(1));
+        mockMvc.perform(get("/api/holds/{id}", holdId).with(ALICE))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.expiresAt").value(expiresAt.toString()));
+        assertThat(db.holdStatus(holdId)).isEqualTo("ACTIVE");
+        assertThat(jdbcTemplate.queryForObject("SELECT expires_at FROM seat_hold WHERE id = ?", Instant.class, holdId))
+                .isEqualTo(expiresAt);
+    }
+
+    @Test
+    void expiredHoldIsReportedExpiredWithoutWriting() throws Exception {
+        UUID holdId = holdId(hold(ALICE, seats.get(0)).andExpect(status().isCreated()));
+        Instant expiresAt = TestClockConfiguration.START.plus(TTL);
+        clock.advance(TTL);
+
+        mockMvc.perform(get("/api/holds/{id}", holdId).with(ALICE))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EXPIRED"))
+                .andExpect(jsonPath("$.expiresAt").value(expiresAt.toString()))
+                .andExpect(jsonPath("$.seatIds", contains(seats.get(0).intValue())));
+
+        assertThat(db.holdStatus(holdId)).as("GET must not persist lazy expiry").isEqualTo("ACTIVE");
+        assertThat(jdbcTemplate.queryForObject("SELECT expires_at FROM seat_hold WHERE id = ?", Instant.class, holdId))
+                .isEqualTo(expiresAt);
+    }
+
+    @Test
+    void releasedAndConvertedHoldsReturnTheirStoredStatus() throws Exception {
+        UUID released = holdId(hold(ALICE, seats.get(0)).andExpect(status().isCreated()));
+        release(ALICE, released).andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/holds/{id}", released).with(ALICE))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RELEASED"))
+                .andExpect(jsonPath("$.seatIds", hasSize(0)));
+
+        UUID converted = holdId(hold(ALICE, seats.get(1)).andExpect(status().isCreated()));
+        mockMvc.perform(post("/api/holds/{id}/payment", converted).with(ALICE)
+                        .header("Idempotency-Key", "hold-lookup-converted")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"scenario\":\"SUCCESS\"}"))
+                .andExpect(status().isCreated());
+        mockMvc.perform(get("/api/holds/{id}", converted).with(ALICE))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONVERTED"))
+                .andExpect(jsonPath("$.seatIds", contains(seats.get(1).intValue())))
+                .andExpect(jsonPath("$.paymentId").doesNotExist());
+        assertThat(db.holdStatus(converted)).isEqualTo("CONVERTED");
+    }
+
+    @Test
+    void anotherCustomersHoldLooksNonexistentOnLookup() throws Exception {
+        UUID holdId = holdId(hold(ALICE, seats.get(0)).andExpect(status().isCreated()));
+
+        mockMvc.perform(get("/api/holds/{id}", holdId).with(BOB))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        mockMvc.perform(get("/api/holds/{id}", UUID.randomUUID()).with(ALICE))
+                .andExpect(status().isNotFound());
+        assertThat(db.holdStatus(holdId)).isEqualTo("ACTIVE");
     }
 
     @Test

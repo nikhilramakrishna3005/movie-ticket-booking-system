@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -37,6 +38,10 @@ public interface ShowtimeRepository extends JpaRepository<Showtime, Long> {
             WHERE st.id = :showtimeId""", nativeQuery = true)
     int createSeatInventory(@Param("showtimeId") long showtimeId, @Param("standardPrice") BigDecimal standardPrice,
             @Param("premiumPrice") BigDecimal premiumPrice);
+
+    /** Serializes cancellation with hold creation, which takes the same lock before inserting a hold. */
+    @Query(value = "SELECT * FROM showtime WHERE id = :id FOR UPDATE", nativeQuery = true)
+    Optional<Showtime> lockById(@Param("id") long id);
 
     /** Any showtime, cancelled or past included: each one has inventory rows that reference the seats. */
     boolean existsByScreenId(long screenId);

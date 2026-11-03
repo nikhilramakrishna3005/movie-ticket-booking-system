@@ -41,10 +41,12 @@ class SecurityIT {
 
     @ParameterizedTest
     @CsvSource({
-            "alice,         alice-demo-pass,    CUSTOMER,      Alice (demo customer)",
-            "bob,           bob-demo-pass,      CUSTOMER,      Bob (demo customer)",
-            "admin.dallas,  dallas-admin-demo,  THEATER_ADMIN, Dallas theater admin (demo)",
-            "admin.houston, houston-admin-demo, THEATER_ADMIN, Houston theater admin (demo)"
+            "alice,         alice-demo-pass,        CUSTOMER,      Alice (demo customer)",
+            "bob,           bob-demo-pass,          CUSTOMER,      Bob (demo customer)",
+            "e2e.alice,     e2e-alice-demo-pass,    CUSTOMER,      E2E Alice (automated tests)",
+            "e2e.bob,       e2e-bob-demo-pass,      CUSTOMER,      E2E Bob (automated tests)",
+            "admin.dallas,  dallas-admin-demo,      THEATER_ADMIN, Dallas theater admin (demo)",
+            "admin.houston, houston-admin-demo,     THEATER_ADMIN, Houston theater admin (demo)"
     })
     void documentedDemoAccountsAuthenticateWithTheirRole(String username, String password, String role,
             String displayName) throws Exception {
