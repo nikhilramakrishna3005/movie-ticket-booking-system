@@ -1,4 +1,4 @@
-import { LogIn, LogOut, Ticket, UserRound } from 'lucide-react';
+import { Clapperboard, LogIn, LogOut, Ticket, UserRound } from 'lucide-react';
 import { Link, NavLink, useNavigate } from 'react-router';
 import { useAuth } from '../state/AuthContext.tsx';
 import { useCheckoutSessions } from '../state/CheckoutContext.tsx';
@@ -35,7 +35,17 @@ export function Header() {
           <Logo />
         </Link>
         <nav className="flex items-center gap-2" aria-label="Account">
-          {user?.role !== 'THEATER_ADMIN' && (
+          {user?.role === 'THEATER_ADMIN' ? (
+            <NavLink
+              to="/admin"
+              data-testid="nav-admin"
+              className={({ isActive }) => buttonClass('ghost', 'sm', isActive ? 'bg-white/5 text-mist-50' : '')}
+            >
+              <Clapperboard className="size-4 text-violet-300" aria-hidden />
+              <span className="hidden sm:inline">Admin</span>
+              <span className="sr-only sm:hidden">Admin</span>
+            </NavLink>
+          ) : (
             <NavLink
               to="/tickets"
               data-testid="nav-my-tickets"

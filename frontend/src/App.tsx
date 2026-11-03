@@ -13,6 +13,7 @@ import { SeatsPage } from './pages/SeatsPage.tsx';
 import { CheckoutPage } from './pages/CheckoutPage.tsx';
 import { ConfirmationPage } from './pages/ConfirmationPage.tsx';
 import { MyTicketsPage } from './pages/MyTicketsPage.tsx';
+import { AdminPage } from './pages/AdminPage.tsx';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -67,6 +68,7 @@ export function App() {
                 <Route path="checkout/:holdId" element={<CheckoutPage />} />
                 <Route path="bookings/:bookingId" element={<ConfirmationPage />} />
                 <Route path="tickets" element={<MyTicketsPage />} />
+                <Route path="admin" element={<AdminPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Routes>

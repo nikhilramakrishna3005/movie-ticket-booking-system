@@ -51,6 +51,12 @@ async function json<T>(request: APIRequestContext, url: string, user?: DemoUser)
   return (await response.json()) as T;
 }
 
+/** A wall-clock start in the theater's zone, after the seeded schedule so tests never share inventory. */
+export function farFutureLocalStart(): { date: string; time: string; startsAtLocal: string } {
+  const startsAtLocal = randomSlot();
+  return { date: startsAtLocal.slice(0, 10), time: startsAtLocal.slice(11, 16), startsAtLocal };
+}
+
 function randomSlot(): string {
   const day = new Date(FIRST_TEST_DAY + Math.floor(Math.random() * TEST_DAYS) * 86_400_000).toISOString().slice(0, 10);
   const hour = 9 + Math.floor(Math.random() * 12);

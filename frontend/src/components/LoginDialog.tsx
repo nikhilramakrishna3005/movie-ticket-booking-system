@@ -64,7 +64,7 @@ export function LoginDialog() {
           <div>
             <p className="eyebrow">Welcome back</p>
             <h2 id="login-title" className="mt-1 font-display text-2xl font-semibold text-mist-50">
-              Sign in to book
+              Sign in
             </h2>
           </div>
           <button
