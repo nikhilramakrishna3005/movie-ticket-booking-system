@@ -1,7 +1,7 @@
 # Data Model
 
 > **Status: IMPLEMENTED.** This document describes the schema created by the committed Flyway
-> migrations `V1`–`V9` in `backend/src/main/resources/db/migration/`. It was written from those
+> migrations `V1`–`V10` in `backend/src/main/resources/db/migration/`. It was written from those
 > files; if they disagree, the migrations are authoritative. Hibernate runs with
 > `ddl-auto: validate`, so the JPA entities must match this schema at startup.
 
@@ -16,6 +16,7 @@
 | `V7__sample_data.sql` | Sample catalog, cities, theaters, screens, seats, showtimes and `show_seat` inventory (`docs/sample-data.md`) |
 | `V8__demo_users.sql` | Four public demo users (BCrypt hashes) and two theater-admin assignments |
 | `V9__city_time_zone.sql` | `city.time_zone` (IANA zone id) |
+| `V10__booking_history_index.sql` | `booking_customer_history_idx (customer_id, created_at DESC, id DESC)` for `GET /api/bookings`; drops `booking_customer_idx`, which was its prefix |
 
 ## Entity-relationship diagram
 
@@ -199,6 +200,16 @@ Testcontainers PostgreSQL 16).
 Timestamps have no database defaults. The application sets them from the injected UTC `Clock`
 (`docs/architecture.md` §7). The one default in V9 (`city.time_zone`) backfills existing rows
 and is dropped in the same migration.
+
+## Booking history reads
+
+`GET /api/bookings` adds no columns and copies no data. A page of bookings is read through
+`booking_customer_history_idx`, filtered by `status = 'CONFIRMED'`, and sorted by
+`created_at DESC, id DESC`, so ties are broken the same way on every request. The seats, the
+showtime, theater, city and time zone, and the movie title are then read from their own
+tables in batches, one query each per page. `DatabaseSchemaIT.bookingHistoryIsIndexedByCustomerNewestFirst`
+checks the index definition and that the old index is gone. The query plan has not been
+measured at scale.
 
 ## Tables that exist but are not fully used
 
