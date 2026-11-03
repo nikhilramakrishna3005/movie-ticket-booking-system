@@ -75,7 +75,7 @@ flowchart LR
 |---|---|---|
 | `catalog` | Movies, languages, genres; showtime search query | `movie`, `genre`, `movie_genre` |
 | `theater` | Cities, theaters, screens, physical seats, showtimes; creating `show_seat` rows when a showtime is created | `city`, `theater`, `screen`, `seat`, `showtime` |
-| `booking` | Per-showtime seat inventory, holds, bookings, outbox events | `show_seat`, `seat_hold`, `booking`, `booking_seat`, `outbox_event` |
+| `booking` | Per-showtime seat inventory, holds, bookings, outbox events, local notification inbox | `show_seat`, `seat_hold`, `booking`, `booking_seat`, `outbox_event`, `notification_inbox` |
 | `payment` | Payment attempts, simulated provider and its ledger | `payment_attempt`, `simulated_provider_charge` |
 | `admin` | Theater-admin REST endpoints; delegates to `theater` services, and to `booking` for showtime cancellation | — |
 | `security` (shared) | Spring Security config, seeded users, theater-admin assignments | `app_user`, `theater_admin_assignment` |
@@ -584,6 +584,7 @@ existing booking. The `UNIQUE (hold_id)` constraint is the backstop.
 | View payment status | — (401) | Own attempts only (others: 404) | — (403) | Yes |
 | View a booking (`GET /bookings/{id}`) | — (401) | Own bookings only (others: 404) | — (403) | Yes |
 | List own bookings (`GET /bookings`) | — (401) | Own bookings only (the customer comes from the credentials) | — (403) | Yes (Task 10) |
+| List own notifications (`GET /notifications`) | — (401) | Own inbox only | — (403) | Yes (Task 13) |
 | Create a showtime | — (401) | — (403) | Only for theaters they are assigned to (others: 403) | Yes |
 | List assigned theaters, screens and a day's showtimes | — (401) | — (403) | Assigned theaters only (others: 403; unknown screen: 404) | Yes (Task 11) |
 | Add a screen, or replace its layout before the first showtime | — (401) | — (403) | Assigned theaters only; a layout with any showtime is 409 `SCREEN_HAS_SHOWTIMES` | Yes (Task 11) |
@@ -603,18 +604,32 @@ on the browsing paths (`/cities`, `/movies`, `/languages`, `/showtimes`, `/showt
 ## 9. Downstream notifications (transactional outbox)
 
 - TX3 inserts an `outbox_event` (`BookingConfirmed`) in the **same transaction** as the booking.
-  An event exists if and only if the booking committed. **This part is required.**
-- Delivering events (a relay that reads unpublished rows with `FOR UPDATE SKIP LOCKED`, logs or
-  "sends" them, and sets `published_at`) is a background worker and is **on the cut list**. If
-  built, delivery is at-least-once and consumers must deduplicate by event id.
-- This is the integration seam where Kafka could later be attached (ADR 0002).
+  An event exists if and only if the booking committed.
+- A Spring `@Scheduled` dispatcher (disabled in tests) claims unpublished due rows with
+  `FOR UPDATE SKIP LOCKED`, in batches of 20. Claim sets `claimed_until` (30 s lease) and
+  increments `attempt_count`, then **commits**. The local consumer then writes
+  `notification_inbox` keyed by `event_id`. Only after that insert commits does the dispatcher
+  set `published_at`. That is at-least-once local delivery, not exactly-once network delivery:
+  there is no email, SMS or Kafka.
+- Replay is safe because `notification_inbox.event_id` is unique. The consumer skips when that
+  id already exists, and a racing insert is ignored as a unique-constraint violation. A crash
+  after the inbox write and before `published_at` is recovered by another claim after the lease
+  expires; the second insert is a no-op and the ack still happens.
+- Transient consumer failures record `last_error` and `next_attempt_at` with bounded exponential
+  backoff (1 s, doubling, cap 60 s). After 8 claims the row stays unpublished for inspection and
+  is no longer picked up. The poller does not hot-loop: it only claims rows whose
+  `next_attempt_at` is due.
+- The dispatcher is never invoked from the checkout or payment transactions.
+- Kafka remains deferred (ADR 0002). This in-process poller is the assessment stand-in, not a
+  production broker: one process, one consumer, PostgreSQL as the queue, no replay of a topic.
 
 ## 10. API
 
 This is the design table, annotated with implementation status. The reference for the
 implemented endpoints, with real request and response examples and the complete error codes
 (including `HOLD_CONVERTED` for releasing a booked hold), is **`docs/api.md`**. Not implemented:
-background workers (outbox relay, hold sweeper, scheduled payment reconciliation).
+hold sweeper and scheduled payment reconciliation. The outbox relay is implemented in-process
+(§9); Kafka is still deferred.
 
 All paths are under `/api`. Errors use a JSON body `{ "code": "…", "message": "…", "details": … }`.
 
@@ -633,6 +648,7 @@ All paths are under `/api`. Errors use a JSON body `{ "code": "…", "message": 
 | `GET /payments/{id}` | owner | 200 current state (with the booking once `SUCCEEDED`); triggers on-demand resolution if `UNKNOWN` or stale `PENDING` |
 | `GET /bookings/{id}` | owner | Confirmation: reference, movie, theater, screen, city, start time, seats, total |
 | `GET /bookings?page=&size=` | customer | Own `CONFIRMED` bookings, newest first (`created_at DESC, id DESC`); no customer parameter; `size` default 10, capped at 50; `page` 0–1000; 400 `INVALID_REQUEST` (implemented in Task 10) |
+| `GET /notifications?page=&size=` | customer | Own inbox rows from the local outbox consumer, newest first; no customer parameter; same page bounds as bookings (Task 13) |
 | `GET /auth/me` | authenticated | Current user id, username, display name and role (used by the React login flow) |
 | `POST /admin/showtimes` (body: `movieId`, `screenId`, `languageCode`, `startsAtLocal`, `standardPrice`, `premiumPrice`) | theater admin (scoped by the screen's theater) | 201 with seat inventory; 400 `INVALID_REQUEST` (`details.fields`) / `INVALID_START_TIME` (past, DST gap or overlap); 403 not assigned; 409 `SHOWTIME_OVERLAP` / `SCREEN_BUSY` (implemented; replaces the proposed `/admin/theaters/{theaterId}/showtimes`) |
 | `GET /admin/theaters` | theater admin | Assigned theaters with screens and seat counts; the list comes from the principal (Task 11) |
@@ -697,21 +713,22 @@ and Kafka would be added only when measurements justify them (ADRs 0001–0003).
 | Component | Status |
 |---|---|
 | Project scaffolding, Docker Compose | Implemented (Phase 1, PR #2). Task 07 added the `frontend` service (nginx serving the React build and proxying `/api` and `/actuator` same-origin), a backend healthcheck, and stopped publishing the backend port. Verified in Task 07: `docker compose up --build` started all three services healthy in the agent VM, health and API reachable through the proxy. |
-| Flyway schema and seed data | Implemented (V1–V11; V9 adds `city.time_zone` in Task 06; V10 replaces the booking customer index with the history index in Task 10; V11 seeds Playwright-only customers `e2e.alice` and `e2e.bob`). Since Task 06, verified with Testcontainers (PostgreSQL 16.15, `./mvnw clean verify`). |
+| Flyway schema and seed data | Implemented (V1–V12; V9 adds `city.time_zone` in Task 06; V10 replaces the booking customer index with the history index in Task 10; V11 seeds Playwright-only customers `e2e.alice` and `e2e.bob`; V12 adds outbox claim/retry columns and `notification_inbox`). Since Task 06, verified with Testcontainers (PostgreSQL 16.15, `./mvnw clean verify`). |
 | Security (HTTP Basic, seeded users, scoping) | Implemented (PR #2). Since Task 06, the browsing `GET` endpoints and the seat map are anonymous as §8.1 requires; holds, payments, bookings and admin endpoints are unchanged. |
 | Catalog & search | Implemented (Task 06): `GET /cities`, `/movies`, `/showtimes`, `/showtimes/{id}` (§10, §11). Task 11 added `GET /languages`. Verified by `DiscoveryApiIT` and `AdminTheaterApiIT` on Testcontainers. |
 | Theater & showtimes | Implemented (Task 06): admin showtime creation with seat inventory, DST-aware local start times, overlap rejection by the exclusion constraint, per-screen lock (§5.1). Task 11 added assigned-theater overviews, the day's schedule (including started and cancelled shows), adding a screen, and replacing a layout only before the first showtime under the same screen lock. Task 12 added assigned-theater cancellation: refuse when bookings, unresolved payments or live holds exist; idempotent re-cancel; no row deletion. Verified by `AdminShowtimeApiIT`, `AdminTheaterApiIT` and `ShowtimeCancellationIT`. |
 | Seat holds & locking | Implemented (Phase 2): create hold, release hold, seat map (§5.3, §5.4, §5.6). Locks use native `SELECT … FOR UPDATE`. First verified on local PostgreSQL 16; since Task 06 verified on Testcontainers (`HoldApiIT`, `HoldConcurrencyIT`). The §5.6 `PAYMENT_IN_PROGRESS` release check was added in Phase 3. Task 12 added `GET /holds/{id}` (owner-only, Clock-based effective status, no TTL extension) and the showtime row lock on hold creation so it cannot race cancellation. |
 | Simulated payment & attempt states | Implemented (Phase 3): provider with ledger and transaction guard, attempt states, idempotency, on-demand resolution (§6). First verified on local PostgreSQL 16; since Task 06 verified on Testcontainers (`PaymentApiIT`, `PaymentConcurrencyIT`, `SimulatedProviderFenceIT`). No background reconciliation (by design). |
-| Booking confirmation & outbox write | Implemented (Phase 3): TX3 (§6.8), `GET /bookings/{id}`. The outbox is written, not relayed. Task 10 added `GET /bookings`: one indexed page query plus batched reads of seats, showtime and venue details and movie titles through the `theater` and `catalog` services (at most seven statements per page, nothing denormalized). Verified by `BookingHistoryApiIT` on Testcontainers. |
+| Booking confirmation & outbox write | Implemented (Phase 3): TX3 (§6.8), `GET /bookings/{id}`. Task 10 added `GET /bookings`. Task 13 relays unpublished `BookingConfirmed` rows in-process (`FOR UPDATE SKIP LOCKED`, idempotent `notification_inbox`, `published_at` after the inbox commit). Verified by `PaymentApiIT` and `OutboxDeliveryIT`. |
 | Admin endpoint (create showtime) | Implemented (Task 06): `POST /admin/showtimes`, theater-scoped (§8.1). Task 11 added theater/screen/schedule reads, screen creation and pre-showtime layout replacement, and the admin dashboard at `/admin`. Task 12 added `POST /admin/showtimes/{id}/cancel` and a Cancel control on the dashboard. |
-| React UI | Implemented (Task 07): customer flow (discover, movie, seats, checkout, ticket). Frontend unit tests (Node test runner) cover the API client, payment-outcome classification and helpers. Booking flows (success after decline, timeout/`UNKNOWN` polling, seat conflict, admin refused, hold expiry) were exercised in headless Chrome against the Compose stack by a throwaway script in Task 07. Since Task 08, the booking, decline-retry and seat-conflict flows are covered by the Playwright suite. Task 10 added the My Tickets screen (`/tickets`, history held in React state only) and fixed a race where a pending search debounce navigated a user who had just opened a showtime back to Discover. Task 11 added the theater-admin dashboard (`/admin`): assigned theaters only, screens with a locked-layout rule, scheduling a showtime, and hiding Hold from admins. Task 12 added a Cancel control on that dashboard and, after a reload, checkout can recover an ACTIVE hold via `GET /holds/{id}` once the customer signs in again. Passwords stay in memory. |
+| React UI | Implemented (Task 07): customer flow (discover, movie, seats, checkout, ticket). Frontend unit tests (Node test runner) cover the API client, payment-outcome classification and helpers. Booking flows (success after decline, timeout/`UNKNOWN` polling, seat conflict, admin refused, hold expiry) were exercised in headless Chrome against the Compose stack by a throwaway script in Task 07. Since Task 08, the booking, decline-retry and seat-conflict flows are covered by the Playwright suite. Task 10 added the My Tickets screen (`/tickets`, history held in React state only) and fixed a race where a pending search debounce navigated a user who had just opened a showtime back to Discover. Task 11 added the theater-admin dashboard (`/admin`): assigned theaters only, screens with a locked-layout rule, scheduling a showtime, and hiding Hold from admins. Task 12 added a Cancel control on that dashboard and, after a reload, checkout can recover an ACTIVE hold via `GET /holds/{id}` once the customer signs in again. Passwords stay in memory. Task 13 added `/notifications` backed by `GET /api/notifications` (no client-side fake inbox). |
 | Integration / concurrency tests | Security, schema, hold, payment, discovery and admin ITs. Earlier phases ran them on local PostgreSQL 16 only. In Task 06 Docker was installed in the agent VM and the **whole suite ran on Testcontainers for the first time**: 132/132 ITs and 59/59 unit tests passed. |
 | Playwright E2E tests | Implemented (Task 08): `frontend/e2e/`, Chromium only. Each test schedules its own showtime through the admin API (the admin UI tests create one through the dashboard instead). Task 10 added 3 tests (search race, search filtering, My Tickets). Task 11 added 2 (`admin.spec.ts`: customer refused; admin schedules a showtime that appears in discovery). Task 12 added 1 (admin cancels a showtime; a customer cannot book it) and switched booking, seat-conflict and My Tickets tests to `e2e.alice` / `e2e.bob`. 9 tests passed on a Mac against the running Compose stack, and `--repeat-each=3` passed 27/27. Timeout/`UNKNOWN`, keyboard and mobile E2E tests are not implemented. |
 | Final audit (2026-11-02) | From a clean database: backend 59/59 unit tests and 132/132 integration tests (Testcontainers), frontend 34/34 unit tests and the build, and Playwright 3/3 on two runs. The README steps were also followed in a fresh clone. Details in `docs/test-strategy.md` and `docs/requirements-checklist.md` §10. |
 | Task 10 (2026-11-03) | On a Mac (JDK 23, Docker Desktop): backend 64/64 unit and 142/142 integration tests (Testcontainers), frontend 40/40 unit tests and the build, Playwright 6/6 and 18/18 with `--repeat-each=3` against the running Compose stack, which was rebuilt in place (no volume reset). See `docs/test-strategy.md`. |
 | Task 11 (2026-11-03) | On a Mac (JDK 23, Docker Desktop): backend 64/64 unit and 158/158 integration tests, frontend 50/50 unit tests, Playwright 8/8 and 24/24 with `--repeat-each=3` against the running Compose stack, rebuilt in place (no volume reset). Booking `9956RB4M` kept. No new Flyway migration. See `docs/test-strategy.md`. |
 | Task 12 (2026-11-03) | On a Mac (JDK 23, Docker Desktop): backend 64/64 unit and 174/174 integration tests, frontend 52/52 unit tests and the build, Playwright 9/9 and 27/27 with `--repeat-each=3` against the running Compose stack, rebuilt in place (no volume reset). Booking `9956RB4M` kept. Flyway V11 seeded Playwright-only customers. See `docs/test-strategy.md`. |
+| Task 13 (2026-11-03) | On a Mac (JDK 23, Docker Desktop): backend 66/66 unit and 184/184 integration tests, frontend 53/53 unit tests and the build, Playwright 9/9, `./run-tests.sh` exit 0. Booking `9956RB4M` kept. Flyway V12. |
 | Required documentation | Complete in the final audit: `README.md`, `docs/requirements-checklist.md`, `docs/data-model.md`, `docs/api.md`, `docs/test-strategy.md`, and updates to this file, the product scope, the ADRs and the AI workflow record. |
 
 Update this table only after a phase's verification checkpoint has actually passed.

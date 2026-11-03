@@ -148,9 +148,8 @@ Cut in this order (first item is cut first). Cutting is decided by the human own
 cut is recorded in the README's known limitations.
 
 1. Admin UI (already excluded from the plan).
-2. Background workers: hold-cleanup sweeper, outbox relay, scheduled payment reconciliation.
-   Correctness does not depend on them (lazy expiry; on-demand `resolve`; outbox rows are still
-   written and asserted in tests).
+2. Background workers: hold-cleanup sweeper, scheduled payment reconciliation. ~~Outbox relay.~~
+   Implemented in Task 13 as an in-process PostgreSQL poller (not Kafka).
 3. ~~Admin showtime cancellation.~~ Implemented in Task 12 (`POST /api/admin/showtimes/{id}/cancel`).
 4. "My bookings" page (the confirmation page is sufficient).
 5. Live seat-map refresh/polling (refresh on navigation only).

@@ -98,14 +98,15 @@ for how the design accounts for this and what is out of reach for this assessmen
 
 - Real payment providers, real card data, PCI compliance, real refunds.
 - Real identity management (sign-up, password reset, OAuth/SSO, MFA), and HTTPS in the local stack.
-- Real email/SMS/push delivery. Booking events are recorded in an outbox; delivering them is a
-  stretch item.
+- Real email/SMS/push delivery. Task 13 relays `BookingConfirmed` into a local
+  `notification_inbox` only (at-least-once, not a production mailer or Kafka).
 - Customer cancellations or refunds after a booking is confirmed.
 - Platform-admin role; catalog management UI.
 - Dynamic pricing, coupons, loyalty, food & beverage, gift cards, taxes, multi-currency, i18n.
 - Recommendations, reviews, trailers.
-- Background workers (hold-cleanup sweeper, outbox relay, scheduled payment reconciliation).
-  These are stretch items only; correctness must not depend on them.
+- Background workers (hold-cleanup sweeper, scheduled payment reconciliation).
+  These are stretch items only; correctness must not depend on them. The outbox relay is
+  implemented locally in Task 13; Kafka is still deferred.
 - Virtual waiting room, CDN, autoscaling, multi-instance deployment, load testing to the
   500,000-visitor target (discussed as design considerations only).
 - Accessibility audit and mobile apps.
@@ -212,12 +213,13 @@ Each criterion should map to at least one automated test once implemented (see
   local times shown for a showtime, and an admin's entered start time are in the theater's city
   time zone (`city.time_zone`; all sample cities use `America/Chicago`).
 
-## 8. Delivery status (final audit, 2026-11-02; updated for Tasks 10–12, 2026-11-03)
+## 8. Delivery status (final audit, 2026-11-02; updated for Tasks 10–13, 2026-11-03)
 
 **Delivered and covered by automated tests:**
 - Workflows 3.1–3.7 (3.6, "view my bookings", was added in Task 10; 3.7 gained the admin
   dashboard, screen management and schedule views in Task 11, and assigned-theater showtime
-  cancellation in Task 12).
+  cancellation in Task 12). Task 13 added local outbox relay to `notification_inbox`,
+  `GET /api/notifications`, and `/notifications`.
 - Every acceptance criterion in §5.
 - Failure cases F1–F7 and F9–F14.
 - F8 (a crash between charge and confirmation) is handled by on-demand resolution of a stale
@@ -228,6 +230,7 @@ Each criterion should map to at least one automated test once implemented (see
 
 | Feature | Why / where recorded |
 |---|---|
-| Background workers: hold-cleanup sweeper, outbox relay, scheduled payment reconciliation | Cut list item 2; correctness relies on lazy expiry and on-demand resolution instead |
+| Background workers: hold-cleanup sweeper, scheduled payment reconciliation | Cut list item 2; correctness relies on lazy expiry and on-demand resolution instead |
+| Kafka (or any hosted broker) | ADR 0002. Task 13 delivers outbox rows in-process to `notification_inbox` only |
 | Redis, Kafka, Solr | ADRs 0001–0003 |
 | Load testing to the 500,000-visitor target | Non-goal; design notes only (`docs/architecture.md` §12) |

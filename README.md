@@ -127,11 +127,13 @@ or `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
   (size capped at 50). The customer comes from the credentials, never from a parameter.
 - **Hold lookup:** `GET /api/holds/{id}` returns the owner's current hold state from the injected
   Clock without extending expiry. Other customers get 404.
+- **Outbox relay:** a local Spring poller delivers `BookingConfirmed` events into
+  `notification_inbox` (at-least-once, idempotent by event id). `GET /api/notifications` and
+  `/notifications` show the caller's inbox. This is not email and not Kafka.
 
 **Not implemented (by design or cut for time):**
 - Customer booking cancellation and refunds.
-- Background workers: hold cleanup, outbox relay, payment reconciliation. The outbox is written
-  but not delivered.
+- Hold-cleanup sweeper and scheduled payment reconciliation.
 - Redis, Kafka and Solr, which are deferred by the ADRs.
 
 **Honest limitations of this task:**
@@ -140,6 +142,10 @@ or `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
   hold up again only once you sign in.
 - Cancellation refuses while a simulated payment is `PENDING` or `UNKNOWN`. If that attempt then
   captures, the show has bookings and cannot be cancelled; Cinéva does not void or refund it.
+- Outbox delivery is at-least-once inside this process. A crash between inbox insert and
+  `published_at` is retried; the unique event id prevents a duplicate row. There is no claim of
+  exactly-once network or email delivery. After eight failed claims an event stays unpublished
+  with `last_error` for inspection.
 
 The full status is in [`docs/requirements-checklist.md`](docs/requirements-checklist.md).
 
@@ -183,8 +189,8 @@ cd frontend && npm ci && npx playwright install --with-deps chromium && npm run 
   `frontend/test-results/`.
 
 What each suite proves, and the latest results, are in
-[`docs/test-strategy.md`](docs/test-strategy.md). The latest results were 64 backend unit tests,
-174 integration tests, 52 frontend unit tests and 9 Playwright tests, all passing, on
+[`docs/test-strategy.md`](docs/test-strategy.md). The latest results were 66 backend unit tests,
+184 integration tests, 53 frontend unit tests and 9 Playwright tests, all passing, on
 2026-11-03.
 
 ## Repository structure
@@ -193,7 +199,7 @@ What each suite proves, and the latest results, are in
 backend/                 Spring Boot application (Maven wrapper, Dockerfile)
   src/main/java/com/moviebooking/
     catalog/ theater/ booking/ payment/ admin/ security/ config/
-  src/main/resources/db/migration/   Flyway V1–V11 (schema, sample data, demo and Playwright users, indexes)
+  src/main/resources/db/migration/   Flyway V1–V12 (schema, sample data, demo and Playwright users, outbox relay)
   src/test/java/         JUnit unit tests (*Test) and Testcontainers integration tests (*IT)
 frontend/                React + TypeScript + Vite app, nginx config, Dockerfile
   src/                   pages, components, features, API client, unit tests (*.test.ts)

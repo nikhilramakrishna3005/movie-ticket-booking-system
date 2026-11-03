@@ -114,8 +114,9 @@ the human owner to classify; none of those are entered here.
 | 2026-11-03 | Task 11 (layout lock) | A layout replacement that skipped `lockForScheduling` could interleave with the first showtime's `show_seat` insert. | Mutation check: the race test failed 3/3 with `CannotAcquireLockException` on the insert. | The lock was restored; with it, `AdminTheaterApiIT` is 16/16. |
 | 2026-11-03 | Task 11 (admin date) | The dashboard used `schedule.data?.date ?? date ?? today` with `date = ''` when the URL had no date. `??` does not skip `''`, so `longDate('')` threw `RangeError: Invalid time value` and unmounted the app after admin login. | Playwright `admin.spec.ts` against the Compose stack; a debug run captured the pageerror. | Treat a missing date as `undefined` so today is used until the schedule arrives. |
 | 2026-11-03 | Task 12 (cancel IT compile) | `ShowtimeCancellationIT` called HoldFixtures helpers that were package-private. | First `./mvnw -B verify` compile of the new IT. | Those helpers were made `public`. |
+| 2026-11-03 | Task 13 (test YAML) | A test `application.yml` replaced the main YAML document and dropped `booking.lock-timeout`. | `ApplicationContextWithoutDatabaseTest` failed 28/28 to load the context. | Overlay `booking.outbox.enabled=false` with `src/test/resources/application.properties` instead. |
 
-## 6. Task prompts and context (Tasks 06–12)
+## 6. Task prompts and context (Tasks 06–13)
 
 The prompts below were given by the human owner to one Cursor cloud agent (Claude) working in a
 VM with a clone of this repository. Earlier phases (PRs #1–#4) were done by a different agent
@@ -132,6 +133,7 @@ The prompts are summarized, and constraints are quoted where they shaped the res
 | 10: search race fix and My Tickets | Reproduce the search debounce race in a deterministic Playwright test that fails before the fix, fix the cause, and keep Back/Forward, filters and accessibility. Add `GET /api/bookings` (paginated, newest first, the customer from the principal, no denormalization, indexes only in a new migration) and a My Tickets screen with loading, empty and error states. | "Fix the underlying issue, not the test timing." "No arbitrary sleeps or timing workarounds." "Never from a user-supplied customerId." "No passwords or bookings in browser storage." "Do not run docker compose down -v." "STOP after Task 10." |
 | 11: theater administration | Complete theater admin: assigned theaters only, screens and seating plans, creating a showtime, service-layer authorization, a Cinéva admin dashboard, Testcontainers coverage including cross-theater 403 and a showtime-creation race, frontend form unit tests, and a Playwright path from admin login through public discovery. | "Never modify or delete seats belonging to existing showtimes." "Never run docker compose down -v or delete volumes." "Do not reset or alter existing booked seats." "Do not implement cancellation or outbox processing." "STOP after Task 11." |
 | 12: showtime cancellation and hold lookup | Authorized cancel with lock-order-safe refusal of bookings, in-flight payments and live holds; `GET /holds/{id}`; Playwright customers `e2e.alice` / `e2e.bob`; dashboard Cancel control. | "Never run docker compose down -v." "Never modify previously committed Flyway migrations." "Do not persist passwords." "STOP after Task 12." |
+| 13: transactional outbox delivery | In-process dispatcher with SKIP LOCKED, idempotent inbox, retry/backoff, crash recovery tests; no Kafka. | "Never run docker compose down -v." "Never modify previously committed Flyway migrations." "STOP after Task 13." |
 
 Task 12 was done by a local Cursor agent on the owner's Mac against the owner's running
 Compose stack, after PR #11 had been merged to `main`.
@@ -146,7 +148,7 @@ For Tasks 06–09, its environment needed two VM-only fixes, neither of them com
 - `sudo iptables-legacy -P FORWARD ACCEPT`, because a stale legacy `FORWARD DROP` policy blocked
   container-to-container traffic. Re-confirmed in the audit.
 
-## 7. Verification performed (Tasks 06–12)
+## 7. Verification performed (Tasks 06–13)
 
 | Task | Commands run by the AI agent | Result |
 |---|---|---|
@@ -158,6 +160,7 @@ For Tasks 06–09, its environment needed two VM-only fixes, neither of them com
 | 10 | The race test against the unfixed app, then with the fix (`--repeat-each=10`); `./mvnw -B clean verify`; `npm test`; `npm run build`; `docker compose up -d --build` (no `down -v`); `npx playwright test`, then with `--repeat-each=3`; `./run-tests.sh` | Failed 5/5, then 20/20; 64/64 + 142/142; 40/40; build OK; healthy, V10 applied, the hand-made booking kept; 6/6, then 18/18; exit 0 |
 | 11 | `./mvnw -B verify -Dit.test=AdminTheaterApiIT`; mutation of `replaceLayout` without the screen lock (3 runs); `./mvnw -B clean verify`; `npm test`; `npm run typecheck`; `docker compose up -d --build` (no `down -v`); `npx playwright test`, then `--repeat-each=3`; `./run-tests.sh` | 16/16; failed 3/3 without the lock; 64/64 + 158/158; 50/50; typecheck OK; healthy, booking `9956RB4M` kept; 8/8, then 24/24; exit 0 |
 | 12 | `./mvnw -B clean verify`; `npm test`; `npm run build`; `docker compose up -d --build --wait` (no `down -v`); `npx playwright test`, then `--repeat-each=3`; `./run-tests.sh` | 64/64 + 174/174; 52/52; build OK; healthy, V11 applied, booking `9956RB4M` kept; 9/9, then 27/27; exit 0 |
+| 13 | `./mvnw -B clean verify`; `npm test`; `npm run build`; `docker compose up -d --build --wait` (no `down -v`); `npx playwright test`; `./run-tests.sh` | 66/66 + 184/184; 53/53; build OK; healthy, V12 applied, booking `9956RB4M` kept; 9/9; exit 0 |
 
 A human re-run of these commands is not recorded in this document.
 

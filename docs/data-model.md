@@ -18,6 +18,7 @@
 | `V9__city_time_zone.sql` | `city.time_zone` (IANA zone id) |
 | `V10__booking_history_index.sql` | `booking_customer_history_idx (customer_id, created_at DESC, id DESC)` for `GET /api/bookings`; drops `booking_customer_idx`, which was its prefix |
 | `V11__e2e_test_users.sql` | Playwright-only customers `e2e.alice` and `e2e.bob` (BCrypt hashes); Alice and Bob are unchanged |
+| `V12__outbox_relay_and_notification_inbox.sql` | Outbox claim/retry columns (`claimed_until`, `next_attempt_at`, `attempt_count`, `last_error`); `notification_inbox` keyed by `event_id` |
 
 ## Entity-relationship diagram
 
@@ -172,7 +173,20 @@ erDiagram
         text event_type
         jsonb payload
         timestamptz created_at
-        timestamptz published_at "never set: no relay"
+        timestamptz published_at "ack after inbox commit"
+        timestamptz claimed_until "lease; NULL when idle"
+        timestamptz next_attempt_at
+        integer attempt_count
+        text last_error
+    }
+    NOTIFICATION_INBOX {
+        uuid id PK
+        uuid event_id UK "idempotency key"
+        bigint customer_id FK
+        uuid booking_id
+        text event_type
+        jsonb payload
+        timestamptz created_at
     }
 ```
 
@@ -223,8 +237,9 @@ measured at scale.
 
 ## Tables that exist but are not fully used
 
-- `outbox_event`: a `BookingConfirmed` row is written in the booking transaction. No relay reads
-  it, so `published_at` stays `NULL` (no background worker; ADR 0002).
+- `outbox_event`: a `BookingConfirmed` row is written in the booking transaction. The in-process
+  dispatcher claims unpublished due rows (`FOR UPDATE SKIP LOCKED`), the inbox consumer inserts
+  `notification_inbox` by `event_id`, then `published_at` is set. Kafka is not used (ADR 0002).
 - `showtime.status = 'CANCELLED'`: set by `POST /api/admin/showtimes/{id}/cancel` when the show
   has no bookings, no unresolved payments and no live holds. Search, holds and confirmation
   already honoured the status. Inventory and historical rows are never deleted.
