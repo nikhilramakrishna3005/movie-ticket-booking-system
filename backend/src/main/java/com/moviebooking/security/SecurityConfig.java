@@ -53,7 +53,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         // Browsing is anonymous (docs/architecture.md §8.1). These patterns match single
                         // path segments only, so nothing below /api/showtimes/{id}/seats is opened.
-                        .requestMatchers(HttpMethod.GET, "/api/cities", "/api/movies", "/api/showtimes",
+                        .requestMatchers(HttpMethod.GET, "/api/cities", "/api/movies", "/api/languages", "/api/showtimes",
                                 "/api/showtimes/*", "/api/showtimes/*/seats").permitAll()
                         .requestMatchers("/api/admin/**").hasRole(Role.THEATER_ADMIN.name())
                         .requestMatchers(HttpMethod.POST, "/api/showtimes/*/holds").hasRole(Role.CUSTOMER.name())

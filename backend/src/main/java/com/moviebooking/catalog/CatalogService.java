@@ -48,6 +48,13 @@ public class CatalogService {
         return languages.existsById(code);
     }
 
+    /** Every language a showtime may be shown in, by name. */
+    public List<MovieView.LanguageView> listLanguages() {
+        return languages.findAllByOrderByNameAsc().stream()
+                .map(language -> new MovieView.LanguageView(language.getCode(), language.getName()))
+                .toList();
+    }
+
     public List<MovieView> listMovies() {
         return queries.findMovies();
     }

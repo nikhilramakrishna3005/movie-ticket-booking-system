@@ -26,6 +26,11 @@ public class CatalogController {
         return catalogService.listMovies();
     }
 
+    @GetMapping("/languages")
+    public List<MovieView.LanguageView> languages() {
+        return catalogService.listLanguages();
+    }
+
     /** {@code date} is a calendar date in the theater's local time zone (ISO yyyy-MM-dd). */
     @GetMapping("/showtimes")
     public ShowtimePage searchShowtimes(@RequestParam(required = false) Long cityId,

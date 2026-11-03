@@ -28,6 +28,16 @@ public final class ShowtimeFixtures {
         jdbc.update("DELETE FROM showtime WHERE created_at <> ?", SEED_CREATED_AT);
     }
 
+    /**
+     * Removes screens added by tests, with their seats. Seeded screens are the ones with seeded
+     * showtimes, so this must run after {@link #deleteNonSeedShowtimes()}.
+     */
+    public void deleteNonSeedScreens() {
+        String nonSeed = "SELECT id FROM screen WHERE id NOT IN (SELECT screen_id FROM showtime WHERE created_at = ?)";
+        jdbc.update("DELETE FROM seat WHERE screen_id IN (" + nonSeed + ")", SEED_CREATED_AT);
+        jdbc.update("DELETE FROM screen WHERE id IN (" + nonSeed + ")", SEED_CREATED_AT);
+    }
+
     /** Inserts a scheduled showtime of the movie's length plus 15 minutes, with AVAILABLE seats. */
     public long insertShowtime(String theater, String screen, String movieTitle, Instant startsAt) {
         long showtimeId = jdbc.queryForObject("""

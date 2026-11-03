@@ -3,7 +3,9 @@ package com.moviebooking.theater;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -106,6 +108,34 @@ public class TheaterService {
     /** Seats keyed by id; unknown ids are absent. */
     public Map<Long, Seat> getSeatsById(Collection<Long> seatIds) {
         return seats.findAllById(seatIds).stream().collect(Collectors.toMap(Seat::getId, Function.identity()));
+    }
+
+    /** Today in the theater's zone at the clock's current instant. */
+    public LocalDate today(long theaterId) {
+        return LocalDate.ofInstant(clock.instant(), cities.findByTheaterId(theaterId).orElseThrow().getZone());
+    }
+
+    /**
+     * The local day is a half-open UTC range computed with the city's zone rules, so it is 23 or 25
+     * hours long on daylight-saving days.
+     */
+    public TheaterSchedule getSchedule(long theaterId, LocalDate date) {
+        ZoneId zone = cities.findByTheaterId(theaterId).orElseThrow().getZone();
+        OffsetDateTime from = date.atStartOfDay(zone).toOffsetDateTime();
+        OffsetDateTime to = date.plusDays(1).atStartOfDay(zone).toOffsetDateTime();
+        OffsetDateTime now = clock.instant().atOffset(ZoneOffset.UTC);
+        List<ShowtimeRepository.ScheduleRow> rows = showtimes.findSchedule(theaterId, from, to, now);
+        Map<Long, String> titles = catalogService.getMovieTitles(
+                rows.stream().map(ShowtimeRepository.ScheduleRow::getMovieId).distinct().toList());
+        List<TheaterSchedule.Entry> entries = rows.stream()
+                .map(row -> new TheaterSchedule.Entry(row.getShowtimeId(), row.getScreenId(), row.getScreenName(),
+                        row.getMovieId(), titles.get(row.getMovieId()), row.getLanguageCode(),
+                        ShowtimeStatus.valueOf(row.getStatus()), row.getStartsAt(), row.getEndsAt(),
+                        row.getStartsAt().atZone(zone).toLocalTime(), row.getEndsAt().atZone(zone).toLocalTime(),
+                        row.getSeatCount().intValue(), row.getBookedSeats().intValue(), row.getHeldSeats().intValue(),
+                        row.getStandardPrice(), row.getPremiumPrice()))
+                .toList();
+        return new TheaterSchedule(theaterId, date, zone.getId(), entries);
     }
 
     /**
