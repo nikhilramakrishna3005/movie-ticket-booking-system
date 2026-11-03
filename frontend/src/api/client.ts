@@ -3,15 +3,22 @@ import type {
   BookingConfirmation,
   BookingHistoryPage,
   City,
+  CreatedShowtime,
   CurrentUser,
   Hold,
+  Language,
   Movie,
+  NewShowtimeRequest,
   PaymentResponse,
   PaymentScenario,
+  ScreenDetail,
+  SeatLayoutRow,
   SeatMap,
   ShowtimeDetail,
   ShowtimePage,
   ShowtimeSearchParams,
+  TheaterOverview,
+  TheaterSchedule,
 } from './types.ts';
 
 export interface BookingHistoryParams {
@@ -59,7 +66,7 @@ export interface ApiClientOptions {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
   headers?: Record<string, string>;
   credentials?: Credentials | null;
@@ -82,7 +89,7 @@ export function encodeBasic({ username, password }: Credentials): string {
   return `Basic ${btoa(binary)}`;
 }
 
-function toQuery(params: ShowtimeSearchParams | BookingHistoryParams): string {
+function toQuery(params: object): string {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== null && value !== '') {
@@ -168,6 +175,7 @@ export function createApiClient(options: ApiClientOptions) {
       (await request<CurrentUser>('/api/auth/me', { credentials, retryable: true })).data,
     cities: () => get<City[]>('/api/cities'),
     movies: () => get<Movie[]>('/api/movies'),
+    languages: () => get<Language[]>('/api/languages'),
     searchShowtimes: (params: ShowtimeSearchParams) => get<ShowtimePage>(`/api/showtimes${toQuery(params)}`),
     showtime: (showtimeId: number) => get<ShowtimeDetail>(`/api/showtimes/${showtimeId}`),
     seatMap: (showtimeId: number) => get<SeatMap>(`/api/showtimes/${showtimeId}/seats`),
@@ -188,6 +196,25 @@ export function createApiClient(options: ApiClientOptions) {
     booking: (bookingId: string) => get<BookingConfirmation>(`/api/bookings/${bookingId}`),
     /** The server derives the customer from the credentials; there is no customer parameter to send. */
     bookings: (params: BookingHistoryParams = {}) => get<BookingHistoryPage>(`/api/bookings${toQuery(params)}`),
+    adminTheaters: () => get<TheaterOverview[]>('/api/admin/theaters'),
+    adminSchedule: (theaterId: number, date?: string) =>
+      get<TheaterSchedule>(`/api/admin/theaters/${theaterId}/showtimes${toQuery({ date })}`),
+    adminScreen: (screenId: number) => get<ScreenDetail>(`/api/admin/screens/${screenId}`),
+    /** Not retried: a lost response may have created the screen. */
+    createScreen: (theaterId: number, name: string, rows: SeatLayoutRow[]) =>
+      request<ScreenDetail>(`/api/admin/theaters/${theaterId}/screens`, {
+        method: 'POST',
+        body: { name, rows },
+        retryable: false,
+      }),
+    replaceLayout: (screenId: number, rows: SeatLayoutRow[]) =>
+      request<ScreenDetail>(`/api/admin/screens/${screenId}/layout`, {
+        method: 'PUT',
+        body: { rows },
+        retryable: false,
+      }),
+    createShowtime: (body: NewShowtimeRequest) =>
+      request<CreatedShowtime>('/api/admin/showtimes', { method: 'POST', body, retryable: false }),
   };
 }
 

@@ -17,13 +17,13 @@ import com.moviebooking.security.Role;
  * Reads and resets hold state with plain SQL, so assertions check what PostgreSQL actually
  * stored rather than what the service returned.
  */
-final class HoldFixtures {
+public final class HoldFixtures {
 
     private static final String TEST_USER_PREFIX = "it-customer-";
 
     private final JdbcTemplate jdbc;
 
-    HoldFixtures(JdbcTemplate jdbc) {
+    public HoldFixtures(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
@@ -31,7 +31,7 @@ final class HoldFixtures {
      * Restores the seeded state: no holds, payments or bookings, all seats AVAILABLE, no
      * cancelled showtimes, no test users. Deletes follow the foreign keys.
      */
-    void reset() {
+    public void reset() {
         jdbc.update("DELETE FROM outbox_event");
         jdbc.update("UPDATE show_seat SET status = 'AVAILABLE', hold_id = NULL, hold_expires_at = NULL,"
                 + " booking_id = NULL WHERE status <> 'AVAILABLE'");

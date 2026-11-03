@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -49,6 +50,7 @@ import com.moviebooking.theater.CityRepository;
 import com.moviebooking.theater.ScreenRepository;
 import com.moviebooking.theater.SeatRepository;
 import com.moviebooking.theater.ShowtimeRepository;
+import com.moviebooking.theater.TheaterRepository;
 
 /**
  * Loads the application context with the real security configuration but without database
@@ -62,7 +64,7 @@ import com.moviebooking.theater.ShowtimeRepository;
 @AutoConfigureMockMvc
 @MockitoBean(types = { BookingRepository.class, BookingSeatRepository.class, OutboxEventRepository.class,
         MovieRepository.class, LanguageRepository.class, CatalogQueryRepository.class, CityRepository.class,
-        ScreenRepository.class })
+        ScreenRepository.class, TheaterRepository.class })
 class ApplicationContextWithoutDatabaseTest {
 
     private static final String PASSWORD = "test-only-password";
@@ -184,9 +186,20 @@ class ApplicationContextWithoutDatabaseTest {
 
     @Test
     void customerIsForbiddenFromAdminEndpoints() throws Exception {
+        mockMvc.perform(get("/api/admin/theaters").with(httpBasic("carol", PASSWORD)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
         mockMvc.perform(get("/api/admin/theaters/7/showtimes").with(httpBasic("carol", PASSWORD)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        mockMvc.perform(get("/api/admin/screens/1").with(httpBasic("carol", PASSWORD)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/admin/theaters/7/screens").with(httpBasic("carol", PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/admin/screens/1/layout").with(httpBasic("carol", PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -282,6 +295,7 @@ class ApplicationContextWithoutDatabaseTest {
     void browsingIsAnonymousWhileHoldsPaymentsAndBookingsStayProtected() throws Exception {
         mockMvc.perform(get("/api/cities")).andExpect(status().isOk());
         mockMvc.perform(get("/api/movies")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/languages")).andExpect(status().isOk());
         mockMvc.perform(get("/api/showtimes")).andExpect(status().isOk());
         // Unknown in the mocked repositories: reaching 404 proves the request was not stopped at 401.
         mockMvc.perform(get("/api/showtimes/1")).andExpect(status().isNotFound());
@@ -295,6 +309,9 @@ class ApplicationContextWithoutDatabaseTest {
         mockMvc.perform(get("/api/payments/{id}", UUID.randomUUID())).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/bookings/{id}", UUID.randomUUID())).andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/admin/showtimes").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/theaters")).andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/admin/screens/1/layout").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(holds, paymentAttempts, provider);

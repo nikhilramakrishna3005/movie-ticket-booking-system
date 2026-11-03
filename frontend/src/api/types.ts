@@ -193,3 +193,96 @@ export interface ApiErrorBody {
   message: string;
   details: Record<string, unknown> | null;
 }
+
+export interface ScreenSummary {
+  screenId: number;
+  name: string;
+  rowCount: number;
+  seatCount: number;
+  standardSeats: number;
+  premiumSeats: number;
+  /** True once any showtime exists, because its inventory references these seats. */
+  layoutLocked: boolean;
+}
+
+export interface TheaterOverview {
+  theaterId: number;
+  name: string;
+  address: string;
+  city: City;
+  screens: ScreenSummary[];
+}
+
+export type ShowtimeStatus = 'SCHEDULED' | 'CANCELLED';
+
+export interface ScheduleEntry {
+  showtimeId: number;
+  screenId: number;
+  screenName: string;
+  movieId: number;
+  movieTitle: string;
+  languageCode: string;
+  status: ShowtimeStatus;
+  startsAt: string;
+  endsAt: string;
+  localStartTime: string;
+  localEndTime: string;
+  seatCount: number;
+  bookedSeats: number;
+  heldSeats: number;
+  /** Null when the screen has no seats of that category. */
+  standardPrice: number | null;
+  premiumPrice: number | null;
+}
+
+export interface TheaterSchedule {
+  theaterId: number;
+  date: string;
+  timeZone: string;
+  showtimes: ScheduleEntry[];
+}
+
+export interface ScreenSeatView {
+  seatId: number;
+  rowLabel: string;
+  seatNumber: number;
+  category: SeatCategory;
+}
+
+export interface ScreenDetail {
+  screenId: number;
+  theaterId: number;
+  name: string;
+  layoutLocked: boolean;
+  seats: ScreenSeatView[];
+}
+
+export interface SeatLayoutRow {
+  rowLabel: string;
+  seatCount: number;
+  category: SeatCategory;
+}
+
+export interface NewShowtimeRequest {
+  movieId: number;
+  screenId: number;
+  languageCode: string;
+  startsAtLocal: string;
+  standardPrice: number;
+  premiumPrice: number;
+}
+
+export interface CreatedShowtime {
+  showtimeId: number;
+  theaterId: number;
+  screenId: number;
+  movieId: number;
+  languageCode: string;
+  status: ShowtimeStatus;
+  startsAt: string;
+  endsAt: string;
+  localDate: string;
+  localStartTime: string;
+  timeZone: string;
+  seatCount: number;
+}

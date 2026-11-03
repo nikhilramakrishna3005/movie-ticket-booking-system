@@ -178,6 +178,7 @@ export function SeatsPage() {
   }
 
   const amount = total(chosen);
+  const adminViewer = user?.role === 'THEATER_ADMIN';
   return (
     <div className="mx-auto max-w-7xl px-4 pt-6 pb-32 sm:px-6 lg:pb-16">
       <Link to={detail.data ? `/movies/${detail.data.movie.id}?city=${detail.data.theater.city.id}&date=${detail.data.localDate}` : '/'}
@@ -191,7 +192,7 @@ export function SeatsPage() {
           {seatMap.data && detail.data ? (
             <>
               {closed && <div className="mb-6"><StateMessage tone="warning" title="This showtime was cancelled">Seats can no longer be held.</StateMessage></div>}
-              <SeatMap seats={seats} selected={selected} onToggle={toggle} disabled={closed || holding} />
+              <SeatMap seats={seats} selected={selected} onToggle={toggle} disabled={closed || holding || adminViewer} />
               <div className="mt-8 flex flex-col items-center gap-4">
                 <SeatLegend prices={detail.data.prices} />
                 <button type="button" onClick={seatMap.reload} className="inline-flex items-center gap-1.5 rounded text-xs text-mist-500 hover:text-mist-200">
@@ -238,15 +239,21 @@ export function SeatsPage() {
 
           {notice && <NoticePanel notice={notice} busy={holding} onResume={(holdId) => navigate(`/checkout/${holdId}`)} onRelease={releaseAndRetry} />}
 
-          <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/6 bg-ink-950/90 p-4 backdrop-blur-xl lg:static lg:border-0 lg:bg-transparent lg:p-0">
-            <Button size="lg" className="w-full" onClick={hold} loading={holding} disabled={chosen.length === 0 || closed} data-testid="continue-button"
-              icon={<ArrowRight className="size-4" aria-hidden />}>
-              {chosen.length === 0 ? 'Select seats' : `Hold ${chosen.length} ${chosen.length === 1 ? 'seat' : 'seats'} · ${price(amount)}`}
-            </Button>
-            <p className="mt-2 hidden text-center text-xs text-mist-500 lg:block">
-              {user ? 'Seats are held for 8 minutes while you pay.' : 'You will be asked to sign in. Seats are held for 8 minutes.'}
-            </p>
-          </div>
+          {adminViewer ? (
+            <StateMessage title="Theater admins cannot hold seats" testId="admin-cannot-hold">
+              This map is for checking availability. Sign out and sign in as a customer to book tickets.
+            </StateMessage>
+          ) : (
+            <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/6 bg-ink-950/90 p-4 backdrop-blur-xl lg:static lg:border-0 lg:bg-transparent lg:p-0">
+              <Button size="lg" className="w-full" onClick={hold} loading={holding} disabled={chosen.length === 0 || closed} data-testid="continue-button"
+                icon={<ArrowRight className="size-4" aria-hidden />}>
+                {chosen.length === 0 ? 'Select seats' : `Hold ${chosen.length} ${chosen.length === 1 ? 'seat' : 'seats'} · ${price(amount)}`}
+              </Button>
+              <p className="mt-2 hidden text-center text-xs text-mist-500 lg:block">
+                {user ? 'Seats are held for 8 minutes while you pay.' : 'You will be asked to sign in. Seats are held for 8 minutes.'}
+              </p>
+            </div>
+          )}
         </aside>
       </div>
     </div>

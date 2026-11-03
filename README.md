@@ -3,7 +3,7 @@
 A movie ticket booking system (in the style of BookMyShow or Fandango), built as the Copart SDET
 Internship take-home assessment. Customers find showtimes across theaters and cities, pick exact
 seats, hold them for 8 minutes, pay through a simulated provider, and get a confirmed ticket.
-Theater admins schedule showtimes for their own theaters through the API.
+Theater admins schedule showtimes for their own theaters from `/admin`.
 
 The focus is **correctness under concurrency** (a seat is never sold twice, and an expired hold is
 never booked) and **automated proof** of it. The stack is Spring Boot 3.5 (Java 21), PostgreSQL 16,
@@ -90,8 +90,8 @@ curl 'http://localhost:3000/api/showtimes?cityId=2&date=2026-11-03&q=Interstelle
 ```
 
 The sample showtimes run from 2026-11-03 to 2027-01-31, at 13:00 and 16:30 in America/Chicago,
-on every screen ([`docs/sample-data.md`](docs/sample-data.md)). There is no admin UI; theater
-admins use `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
+on every screen ([`docs/sample-data.md`](docs/sample-data.md)). Theater admins use `/admin`,
+or `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
 
 ## What is implemented
 
@@ -105,6 +105,9 @@ admins use `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
 - My Tickets (`/tickets`, "My tickets" in the header): the signed-in customer's confirmed
   bookings, newest first, each opening its ticket. Like the sign-in, the list is kept in memory
   only, so a reload or sign-out asks you to sign in again.
+- Admin (`/admin`, "Admin" in the header for theater-admin accounts): assigned theaters only,
+  screens and seating plans, a day's showtimes, and a form to schedule a showtime. Customer-only
+  actions such as holding seats are hidden.
 
 **Backend (Spring Boot, `backend/`):** a modular monolith with packages `catalog`, `theater`,
 `booking`, `payment`, `admin` and `security`.
@@ -114,12 +117,13 @@ admins use `POST /api/admin/showtimes` ([`docs/api.md`](docs/api.md)).
   hold expiry is voided.
 - **Database backstops:** constraints such as `UNIQUE (showtime_id, seat_id)` on booked seats.
 - **Admin:** theater-scoped showtime creation, with overlaps rejected by an exclusion
-  constraint.
+  constraint; assigned-theater reads; adding a screen; replacing a layout only before the
+  screen's first showtime.
 - **Booking history:** `GET /api/bookings` lists only the caller's confirmed bookings, paginated
   (size capped at 50). The customer comes from the credentials, never from a parameter.
 
 **Not implemented (by design or cut for time):**
-- An admin UI, and showtime cancellation.
+- Showtime cancellation.
 - `GET /api/holds/{id}`, and booking cancellation.
 - Background workers: hold cleanup, outbox relay, payment reconciliation. The outbox is written
   but not delivered.
