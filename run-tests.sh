@@ -17,8 +17,10 @@ done
 curl -fsS "$BASE_URL/actuator/health" | grep -q '"status":"UP"' \
   || fail "the Compose stack is not healthy at $BASE_URL; run 'docker compose up --build -d --wait' first"
 
-# The surefire/failsafe summary, node:test TAP summary and Playwright list summary each print a
-# skipped count; any non-zero count fails the run.
+# The surefire/failsafe summary, node:test summary and Playwright list summary each print a
+# skipped count; any non-zero count fails the run. node:test prints "# skipped N" with the TAP
+# reporter and "ℹ skipped N" with the spec reporter (the default on a terminal and, since Node 23,
+# also when piped), so both prefixes are checked.
 check_no_skips() {
   local log="$1" pattern="$2" suite="$3"
   if grep -Eq "$pattern" "$log"; then
@@ -33,7 +35,7 @@ check_no_skips "$LOG_DIR/backend.log" 'Tests run: [0-9]+, Failures: [0-9]+, Erro
 
 echo "==> Frontend unit tests"
 (cd "$ROOT/frontend" && npm ci && npm test) 2>&1 | tee "$LOG_DIR/frontend.log"
-check_no_skips "$LOG_DIR/frontend.log" '^# (skipped|todo) [1-9]' "frontend unit tests"
+check_no_skips "$LOG_DIR/frontend.log" '^(# |ℹ )(skipped|todo) [1-9]' "frontend unit tests"
 
 echo "==> Playwright E2E tests against $BASE_URL"
 (cd "$ROOT/frontend" && npx playwright install chromium && E2E_BASE_URL="$BASE_URL" npx playwright test --forbid-only) \
