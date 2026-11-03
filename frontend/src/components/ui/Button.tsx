@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { Link, type LinkProps } from 'react-router';
 
@@ -26,6 +26,7 @@ export function buttonClass(variant: Variant = 'primary', size: Size = 'md', ext
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  ref?: Ref<HTMLButtonElement>;
   variant?: Variant;
   size?: Size;
   loading?: boolean;
