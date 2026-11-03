@@ -224,10 +224,14 @@ function Dashboard() {
           movies={movies.data ?? []}
           languages={languages.data ?? []}
           onCreated={(created) => {
-            const next = new URLSearchParams(params);
-            next.set('theater', String(created.theaterId));
-            next.set('date', created.localDate);
-            setParams(next, { replace: true });
+            if (created.theaterId === theaterId && created.localDate === date) {
+              schedule.reload();
+            } else {
+              const next = new URLSearchParams(params);
+              next.set('theater', String(created.theaterId));
+              next.set('date', created.localDate);
+              setParams(next, { replace: true });
+            }
             theaters.reload();
           }}
           onCancelled={schedule.reload}

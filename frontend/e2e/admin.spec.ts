@@ -81,6 +81,37 @@ test('an admin schedules a showtime that then appears in public discovery', asyn
   await expect(page.getByTestId('continue-button')).toBeVisible();
 });
 
+test('a showtime scheduled on the date being viewed appears in that schedule immediately', async ({ page }) => {
+  await page.goto('/admin');
+  await page.getByTestId('admin-sign-in').click();
+  await submitLogin(page, USERS.dallasAdmin);
+  await expect(page.getByTestId('admin-create-showtime')).toBeVisible();
+  await page.getByTestId('admin-showtime-movie').selectOption({ label: MOVIE });
+  await page.getByTestId('admin-showtime-screen').selectOption({ label: SCREEN });
+  await page.getByTestId('admin-showtime-language').selectOption({ label: 'English' });
+
+  let showtimeId: number | null = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS && showtimeId === null; attempt++) {
+    const slot = farFutureLocalStart();
+    await page.getByTestId('admin-date-input').fill(slot.date);
+    await expect(page).toHaveURL(new RegExp(`date=${slot.date}`));
+    await expect(page.getByTestId('admin-schedule-empty').or(page.getByTestId('admin-showtime').first())).toBeVisible();
+
+    await page.getByTestId('admin-showtime-date').fill(slot.date);
+    await page.getByTestId('admin-showtime-time').fill(slot.time);
+    const response = page.waitForResponse((r) => r.url().endsWith('/api/admin/showtimes') && r.request().method() === 'POST');
+    await page.getByTestId('admin-showtime-submit').click();
+    const created = await response;
+    if (created.status() === 409) continue;
+    expect(created.status(), await created.text()).toBe(201);
+    showtimeId = ((await created.json()) as { showtimeId: number }).showtimeId;
+
+    await expect(page).toHaveURL(new RegExp(`date=${slot.date}`));
+    await expect(page.locator(`[data-testid="admin-showtime"][data-showtime-id="${showtimeId}"]`)).toBeVisible();
+  }
+  expect(showtimeId, `No free slot after ${MAX_ATTEMPTS} attempts`).not.toBeNull();
+});
+
 test('an admin cancels a showtime and a customer cannot book it', async ({ page, request }) => {
   const showtime = await createFreshShowtime(request, 'Parasite');
 
