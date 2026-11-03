@@ -35,6 +35,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import com.moviebooking.booking.BookingRepository;
 import com.moviebooking.booking.BookingSeatRepository;
+import com.moviebooking.booking.NotificationInboxRepository;
 import com.moviebooking.booking.OutboxEventRepository;
 import com.moviebooking.booking.SeatHoldRepository;
 import com.moviebooking.booking.ShowSeatRepository;
@@ -62,7 +63,8 @@ import com.moviebooking.theater.TheaterRepository;
         + "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration,"
         + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration")
 @AutoConfigureMockMvc
-@MockitoBean(types = { BookingRepository.class, BookingSeatRepository.class, OutboxEventRepository.class,
+@MockitoBean(types = { BookingRepository.class, BookingSeatRepository.class, NotificationInboxRepository.class,
+        OutboxEventRepository.class,
         MovieRepository.class, LanguageRepository.class, CatalogQueryRepository.class, CityRepository.class,
         ScreenRepository.class, TheaterRepository.class })
 class ApplicationContextWithoutDatabaseTest {
@@ -264,6 +266,10 @@ class ApplicationContextWithoutDatabaseTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/bookings/{id}", id))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/notifications").with(httpBasic("dana", PASSWORD)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/notifications"))
+                .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(holds, paymentAttempts, provider);
     }
@@ -312,6 +318,7 @@ class ApplicationContextWithoutDatabaseTest {
         mockMvc.perform(get("/api/holds/{id}", UUID.randomUUID())).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/payments/{id}", UUID.randomUUID())).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/bookings/{id}", UUID.randomUUID())).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/notifications")).andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/admin/showtimes").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/admin/theaters")).andExpect(status().isUnauthorized());

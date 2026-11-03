@@ -1,5 +1,6 @@
 package com.moviebooking.booking;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -17,8 +18,9 @@ import org.hibernate.type.SqlTypes;
 import org.springframework.data.domain.Persistable;
 
 /**
- * Transactional outbox row, written in the same transaction as the change it announces. Nothing
- * publishes these yet (the relay is on the cut list); published_at stays null.
+ * Transactional outbox row, written in the same transaction as the change it announces.
+ * {@code published_at} is set only after the local consumer has persisted its inbox row
+ * (at-least-once; ADR 0002).
  */
 @Entity
 @Table(name = "outbox_event")
@@ -45,6 +47,21 @@ public class OutboxEvent implements Persistable<UUID> {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "published_at")
+    private Instant publishedAt;
+
+    @Column(name = "claimed_until")
+    private Instant claimedUntil;
+
+    @Column(name = "next_attempt_at", nullable = false)
+    private Instant nextAttemptAt;
+
+    @Column(name = "attempt_count", nullable = false)
+    private int attemptCount;
+
+    @Column(name = "last_error")
+    private String lastError;
+
     @Transient
     private boolean isNew;
 
@@ -59,8 +76,27 @@ public class OutboxEvent implements Persistable<UUID> {
         event.eventType = BOOKING_CONFIRMED;
         event.payload = payload;
         event.createdAt = now;
+        event.nextAttemptAt = now;
+        event.attemptCount = 0;
         event.isNew = true;
         return event;
+    }
+
+    void claim(Instant now, Duration lease) {
+        claimedUntil = now.plus(lease);
+        attemptCount++;
+    }
+
+    void markPublished(Instant now) {
+        publishedAt = now;
+        claimedUntil = null;
+        lastError = null;
+    }
+
+    void recordFailure(String error, Instant nextAttempt) {
+        claimedUntil = null;
+        lastError = error == null ? "unknown" : error.substring(0, Math.min(error.length(), 500));
+        nextAttemptAt = nextAttempt;
     }
 
     @Override
@@ -71,6 +107,38 @@ public class OutboxEvent implements Persistable<UUID> {
     @Override
     public boolean isNew() {
         return isNew;
+    }
+
+    UUID getAggregateId() {
+        return aggregateId;
+    }
+
+    String getEventType() {
+        return eventType;
+    }
+
+    Map<String, Object> getPayload() {
+        return payload;
+    }
+
+    Instant getPublishedAt() {
+        return publishedAt;
+    }
+
+    Instant getClaimedUntil() {
+        return claimedUntil;
+    }
+
+    Instant getNextAttemptAt() {
+        return nextAttemptAt;
+    }
+
+    int getAttemptCount() {
+        return attemptCount;
+    }
+
+    String getLastError() {
+        return lastError;
     }
 
     @PostLoad
