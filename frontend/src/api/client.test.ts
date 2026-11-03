@@ -178,6 +178,18 @@ describe('api client', () => {
     assert.equal(calls[0]!.init.method, 'GET');
   });
 
+  it('loads notifications with page and size and no customer parameter', async () => {
+    const { calls, impl } = fakeFetch([
+      json(200, { items: [], page: 0, size: 10, totalItems: 0, totalPages: 0 }),
+    ]);
+    const api = createApiClient({ fetch: impl, getCredentials: () => ({ username: 'alice', password: 'pw' }) });
+
+    await api.notifications({ page: 0, size: 10 });
+
+    assert.equal(calls[0]!.url, '/api/notifications?page=0&size=10');
+    assert.equal(calls[0]!.init.method, 'GET');
+  });
+
   it('retries an idempotent showtime cancellation after a gateway error', async () => {
     const { calls, impl } = fakeFetch([
       json(503, { code: 'HTTP_503', message: 'busy', details: null }),

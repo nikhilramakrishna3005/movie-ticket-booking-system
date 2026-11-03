@@ -1,4 +1,4 @@
-import { Clapperboard, LogIn, LogOut, Ticket, UserRound } from 'lucide-react';
+import { Bell, Clapperboard, LogIn, LogOut, Ticket, UserRound } from 'lucide-react';
 import { Link, NavLink, useNavigate } from 'react-router';
 import { useAuth } from '../state/AuthContext.tsx';
 import { useCheckoutSessions } from '../state/CheckoutContext.tsx';
@@ -46,15 +46,26 @@ export function Header() {
               <span className="sr-only sm:hidden">Admin</span>
             </NavLink>
           ) : (
-            <NavLink
-              to="/tickets"
-              data-testid="nav-my-tickets"
-              className={({ isActive }) => buttonClass('ghost', 'sm', isActive ? 'bg-white/5 text-mist-50' : '')}
-            >
-              <Ticket className="size-4 text-violet-300" aria-hidden />
-              <span className="hidden sm:inline">My tickets</span>
-              <span className="sr-only sm:hidden">My tickets</span>
-            </NavLink>
+            <>
+              <NavLink
+                to="/tickets"
+                data-testid="nav-my-tickets"
+                className={({ isActive }) => buttonClass('ghost', 'sm', isActive ? 'bg-white/5 text-mist-50' : '')}
+              >
+                <Ticket className="size-4 text-violet-300" aria-hidden />
+                <span className="hidden sm:inline">My tickets</span>
+                <span className="sr-only sm:hidden">My tickets</span>
+              </NavLink>
+              <NavLink
+                to="/notifications"
+                data-testid="nav-notifications"
+                className={({ isActive }) => buttonClass('ghost', 'sm', isActive ? 'bg-white/5 text-mist-50' : '')}
+              >
+                <Bell className="size-4 text-violet-300" aria-hidden />
+                <span className="hidden sm:inline">Inbox</span>
+                <span className="sr-only sm:hidden">Inbox</span>
+              </NavLink>
+            </>
           )}
           {user ? (
             <>
